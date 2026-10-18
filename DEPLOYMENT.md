@@ -16,7 +16,7 @@
 
 使用专用免费租户默认域名，不开自定义付费域名。新建 **Regular Web Application**，启用用于注册用户的连接。网站采用 Authorization Code + PKCE，服务器保存 Client Secret。
 
-将实际 Render HTTPS 根地址记为 `PUBLIC_ORIGIN`。在 Auth0 网站应用中精确设置 Callback URL 为该地址加 `/callback`，例如 `https://workforce.example/callback`；不要使用通配符。当前退出只清除本网站会话，不触发全局 Auth0 退出，因此共享电脑切换账号时还应在登录页明确选择账号。
+将实际 Render HTTPS 根地址记为 `PUBLIC_ORIGIN`。Blueprint 通过自引用 `RENDER_EXTERNAL_URL` 自动获取实际地址，不预先猜测域名。在 Auth0 网站应用中精确设置 Callback URL 为该地址加 `/callback`，例如 `https://workforce.example/callback`；不要使用通配符。当前退出只清除本网站会话，不触发全局 Auth0 退出，因此共享电脑切换账号时还应在登录页明确选择账号。
 
 填写环境变量：`AUTH0_ISSUER_BASE_URL` 是租户 HTTPS 根地址，`AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` 来自该网站应用。`SESSION_SECRET` 由 Render 随机生成，轮换会使既有网站会话失效。[Auth0 Express 指南](https://auth0.com/docs/quickstart/webapp/express)
 

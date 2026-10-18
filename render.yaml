@@ -17,7 +17,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: PUBLIC_ORIGIN
-        sync: false
+        fromService:
+          type: web
+          name: workforce-planner-public
+          envVarKey: RENDER_EXTERNAL_URL
       - key: DATABASE_URL
         sync: false
       - key: AUTH0_ISSUER_BASE_URL
