@@ -10,6 +10,18 @@ CREATE TABLE IF NOT EXISTS public_productivity (
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Registered users edit only their own overlay. The shared catalog is never
+-- updated by public website/MCP writes. A tombstone hides an item for its owner.
+CREATE TABLE IF NOT EXISTS public_personal_productivity (
+  user_id text NOT NULL CHECK (length(user_id) BETWEEN 1 AND 200),
+  id text NOT NULL CHECK (length(id) BETWEEN 1 AND 200),
+  entry jsonb NOT NULL CHECK (jsonb_typeof(entry) = 'object' AND octet_length(entry::text) <= 32768),
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, id)
+);
+
 CREATE TABLE IF NOT EXISTS public_plan_history (
   id uuid PRIMARY KEY,
   user_id text NOT NULL CHECK (length(user_id) BETWEEN 1 AND 200),
