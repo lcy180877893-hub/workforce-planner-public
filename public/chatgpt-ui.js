@@ -32,6 +32,8 @@
   const acceptedResults = new Set();
   const processingResults = new Set();
   const recoveryHistoryReads = new Map();
+  const invalidatedCatalogRequests = new Set();
+  let catalogGeneration = 0;
   const storageValues = {};
   const $ = (selector) => document.querySelector(selector);
   const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -136,6 +138,32 @@
   function clearPending() {
     pending = null;
     stopRecovery();
+  }
+
+  function invalidatePreparedRequest() {
+    if (!publicMode) return;
+    catalogGeneration++;
+    for (const requestId of [pending?.requestId, host.getState()?.workforceLastRequestId]) {
+      if (requestId) invalidatedCatalogRequests.add(requestId);
+    }
+    if (invalidatedCatalogRequests.size > 32) invalidatedCatalogRequests.delete(invalidatedCatalogRequests.values().next().value);
+    clearPending();
+    latestOutput = undefined;
+    const fallback = $("#workforce-send-fallback");
+    if (fallback) {
+      fallback.querySelector("textarea").value = "";
+      fallback.open = false;
+      fallback.hidden = true;
+    }
+    host.setState({ workforcePending: null, workforceLastRequestId: null });
+    save();
+    message("个人工效已更新，原待处理测算请求已失效，已停止自动检查且不会回填旧结果。工程量和已保存历史保持不变；请按新工效重新准备测算请求。");
+  }
+
+  async function writeProductivity(name, args) {
+    const value = await call(name, args);
+    invalidatePreparedRequest();
+    return value;
   }
 
   function pendingInputMatches() {
@@ -296,6 +324,7 @@
     if (publicMode) {
       if (!publicSession?.authenticated) return;
       if ((value.record?.plan || resultIsPlan(value)) && value.account?.id !== publicSession.account.id) return;
+      if (invalidatedCatalogRequests.has(value.requestId ?? value.record?.plan?.requestId)) return;
     }
     if (pending && value.record?.plan?.requestId === pending.requestId) {
       const record = value.record;
@@ -457,6 +486,7 @@
     }
     details.querySelector("textarea").value = text;
     details.open = failed;
+    details.hidden = false;
   }
 
   globalThis.workforceUI = {
@@ -472,8 +502,9 @@
       await host.ready;
       const method = (options.method || "GET").toUpperCase();
       if (publicMode && !publicSession?.authenticated) throw new Error("请重新打开已登录的公开版界面。");
-      if (publicMode && /^\/api\/productivity(?:\/|$)/.test(path) && method !== "GET" && !publicSession.account.isAdmin) {
-        throw new Error("共享工效库仅管理员可维护。");
+      if (publicMode && /^\/api\/productivity(?:\/|$)/.test(path) && !["GET", "HEAD"].includes(method)
+        && !(publicSession.account.canEditProductivity && publicSession.account.productivityScope === "personal")) {
+        throw new Error("当前连接尚未启用个人工效编辑，请重新打开界面；不会修改共享工效库。");
       }
       const payload = options.body ? JSON.parse(options.body) : {};
       if (path === "/api/gpt-status") {
@@ -482,18 +513,18 @@
       }
       if (path === "/api/productivity" && method === "GET") {
         // Historical tool outputs can contain an old bootstrap snapshot. Always
-        // read the current shared catalog instead of treating that snapshot as live.
+        // read this account's current effective catalog, never an old snapshot.
         return call("list_productivity");
       }
       const productivity = path.match(/^\/api\/productivity\/([^/]+)$/);
-      if (productivity && method === "DELETE") return call("delete_productivity", { id: decodeURIComponent(productivity[1]) });
+      if (productivity && method === "DELETE") return writeProductivity("delete_productivity", { id: decodeURIComponent(productivity[1]) });
       if ((path === "/api/productivity" && method === "POST") || (productivity && method === "PUT")) {
         const args = { ...payload };
         // Public tools accept all supported calculation modes. The original
         // private MCP schema predates that field and must retain its protocol.
         if (!publicMode) delete args.mode;
         if (productivity) args.id = decodeURIComponent(productivity[1]);
-        return call("upsert_productivity", args);
+        return writeProductivity("upsert_productivity", args);
       }
       if (path === "/api/workforce-history" && method === "GET") return call("list_workforce_history");
       const history = path.match(/^\/api\/workforce-history\/([^/]+)$/);
@@ -507,6 +538,7 @@
     async requestPlan(payload) {
       if (sending) throw new Error("上一请求仍在发送，请稍候，避免重复保存方案。");
       sending = true;
+      const preparingCatalogGeneration = catalogGeneration;
       try {
         if (pending && pending.signature === signature(payload)) {
           const resend = await dialog("确认重新提交测算", "相同工程量的请求已发送，原请求可能仍在当前对话中判断或等待授权。请先检查当前对话，重复生成可能保存两条历史。仅在原请求已结束或失败、确需重新测算时继续。", { confirm: true, confirmLabel: "重新提交" });
@@ -517,6 +549,7 @@
         clearPending();
         save();
         const context = await call("prepare_project_review", payload);
+        if (publicMode && preparingCatalogGeneration !== catalogGeneration) return;
         const requestId = globalThis.crypto?.randomUUID?.() ?? `ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         pending = { requestId, fingerprint: context.fingerprint, signature: signature(payload) };
         save();
@@ -564,7 +597,7 @@
       const tools = document.createElement("div");
       tools.className = "workforce-host-toolbar";
       const label = document.createElement("span");
-      label.textContent = publicMode ? `${publicSession.account.displayName} · 共享工效库${publicSession.account.isAdmin ? "（管理员）" : "（只读）"} · 个人历史独立 · 当前 ChatGPT 会话测算` : "与原网站共用工效库和测算历史 · 当前 ChatGPT 会话测算";
+      label.textContent = publicMode ? `${publicSession.account.displayName} · 共享默认库 + 个人工效${publicSession.account.canEditProductivity && publicSession.account.productivityScope === "personal" ? "（修改仅本人生效）" : "（只读）"} · 个人历史独立 · 当前 ChatGPT 会话测算` : "与原网站共用工效库和测算历史 · 当前 ChatGPT 会话测算";
       const expand = document.createElement("button");
       expand.type = "button";
       expand.className = "text-button";

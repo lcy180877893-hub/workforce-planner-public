@@ -13,6 +13,7 @@
   let sending = false;
   let promptBox;
   let checking = false;
+  let catalogGeneration = 0;
   const signature = (value) => JSON.stringify(value);
   document.body.classList.add("public-auth-loading");
 
@@ -52,10 +53,19 @@
 
   function setAccount(account) {
     if (typeof account?.id !== "string" || !account.id) throw new Error("未返回有效的当前账户。");
-    session.account = { id: account.id, displayName: account.displayName || "当前账户", isAdmin: account.isAdmin === true };
+    session.account = {
+      id: account.id, displayName: account.displayName || "当前账户", isAdmin: account.isAdmin === true,
+      canEditProductivity: account.canEditProductivity === true,
+      productivityScope: account.productivityScope === "personal" ? "personal" : "shared",
+    };
     session.authenticated = true;
     document.body.classList.remove("public-auth-loading");
-    document.body.classList.toggle("workforce-readonly", !session.account.isAdmin);
+    syncProductivityPermission();
+  }
+
+  function syncProductivityPermission() {
+    // Administrator identity never turns this UI into a shared-catalog editor.
+    document.body.classList.toggle("workforce-readonly", !(session.account?.canEditProductivity && session.account.productivityScope === "personal"));
   }
 
   async function readSession() {
@@ -73,7 +83,9 @@
     }
     csrfToken = current.csrfToken;
     session.account.isAdmin = current.user.isAdmin === true;
-    document.body.classList.toggle("workforce-readonly", !session.account.isAdmin);
+    session.account.canEditProductivity = current.user.canEditProductivity === true;
+    session.account.productivityScope = current.user.productivityScope === "personal" ? "personal" : "shared";
+    syncProductivityPermission();
   }
 
   const storage = {
@@ -101,6 +113,17 @@
   function saveDraft() {
     if (!controller || locked) return;
     storage.setItem("draft", JSON.stringify(controller.captureDraft()));
+  }
+
+  function invalidatePreparedRequest() {
+    catalogGeneration++;
+    pending = null;
+    if (promptBox) {
+      promptBox.querySelector("textarea").value = "";
+      promptBox.remove();
+      promptBox = null;
+    }
+    message("个人工效已更新，原待处理测算请求已失效且不会自动回填。工程量和已保存历史保持不变；请按新工效重新准备测算请求。");
   }
 
   function showPrompt(text) {
@@ -136,6 +159,7 @@
     const request = pending;
     try {
       const list = await session.api("/api/workforce-history");
+      if (pending !== request) return;
       const item = list.items?.find((entry) => entry.requestId === request.requestId);
       if (!item) { message("本请求尚无已保存结果，请先在 ChatGPT 对话完成判断；无需重新提交。"); return; }
       const details = await session.api(`/api/workforce-history/${encodeURIComponent(item.id)}`);
@@ -157,8 +181,10 @@
     if (!/^\/api\//.test(path) && path !== "/auth/logout") throw new Error("不支持的公开版接口。");
     await assertWebsiteAccount();
     const method = (options.method || "GET").toUpperCase();
-    if (/^\/api\/productivity(?:\/|$)/.test(path) && !["GET", "HEAD"].includes(method) && !session.account.isAdmin) {
-      throw new Error("共享工效库仅管理员可维护。");
+    const productivityMutation = /^\/api\/productivity(?:\/|$)/.test(path) && ["POST", "PUT", "DELETE"].includes(method);
+    if (/^\/api\/productivity(?:\/|$)/.test(path) && !["GET", "HEAD"].includes(method)
+      && !(session.account.canEditProductivity && session.account.productivityScope === "personal")) {
+      throw new Error("当前连接尚未启用个人工效编辑，请刷新后重试；不会修改共享工效库。");
     }
     if (path === "/api/gpt-status") return { configured: true, message: "使用已连接公开插件的 ChatGPT 会话判断施工顺序。网页生成可复制请求，不额外接入模型 API。" };
     const response = await fetch(path, {
@@ -166,9 +192,13 @@
       headers: { "Content-Type": "application/json", ...(options.headers ?? {}), "X-Workforce-Account": session.account.id, ...(!["GET", "HEAD"].includes(method) ? { "X-CSRF-Token": csrfToken } : {}) },
     });
     if (response.status === 401) { showGate("登录已失效，请重新登录。不会转为私有本地模式。"); throw new Error("请重新登录。"); }
-    if (response.status === 204 && response.ok) return {};
+    if (response.status === 204 && response.ok) {
+      if (productivityMutation) invalidatePreparedRequest();
+      return {};
+    }
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "请求失败");
+    if (productivityMutation) invalidatePreparedRequest();
     return body;
   };
   session.rejectAccount = () => showGate("账户已切换或旧界面的账户信息无法确认。请从当前公开版账户重新打开界面，不会复用旧账户的草稿或结果。");
@@ -213,8 +243,10 @@
         return;
       }
       sending = true;
+      const preparingCatalogGeneration = catalogGeneration;
       try {
         const context = await session.api("/api/project-review", { method: "POST", body: JSON.stringify(payload) });
+        if (preparingCatalogGeneration !== catalogGeneration) return;
         if (!context.fingerprint) throw new Error("未返回工效指纹，未准备测算请求。");
         if (!globalThis.crypto?.randomUUID) throw new Error("浏览器缺少安全请求标识支持，请使用 HTTPS 入口。");
         const requestId = globalThis.crypto.randomUUID();
@@ -233,7 +265,7 @@
       const toolbar = document.createElement("div");
       toolbar.className = "public-account-toolbar";
       const label = document.createElement("span");
-      label.textContent = `${session.account.displayName} · 公开版 · 个人历史独立${session.account.isAdmin ? " · 管理员" : " · 工效库只读"}`;
+      label.textContent = `${session.account.displayName} · 公开版 · 个人历史独立 · ${session.account.canEditProductivity && session.account.productivityScope === "personal" ? "工效修改仅本人生效" : "工效库只读"}`;
       const logout = document.createElement("button");
       logout.type = "button"; logout.className = "text-button"; logout.textContent = "退出登录";
       logout.addEventListener("click", async () => {

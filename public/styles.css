@@ -261,6 +261,8 @@ td { padding: 9px; border-top: 1px solid #e9e5dc; vertical-align: top; }
 .library-filters .search { max-width: none; }
 .library-filters .button { white-space: nowrap; }
 .library-table td { font-size: 13px; line-height: 1.5; }
+.catalog-scope { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.catalog-scope.is-personal { color: var(--accent, #005d4d); }
 .library-table { min-width: 1640px; }
 .library-table th:nth-child(1), .library-table th:nth-child(2) { min-width: 150px; }
 .library-table th:nth-child(3) { min-width: 220px; }

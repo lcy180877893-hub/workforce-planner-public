@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="沙特工程项目工程量、工期与劳动力方案测算，适用于多种项目类型" />
     <title>沙特项目劳动力测算</title>
-    <link rel="stylesheet" href="/styles.css?v=0.18.0" />
+    <link rel="stylesheet" href="/styles.css?v=0.19.1-rc.1" />
   </head>
   <body>
     <header class="hero">
@@ -183,7 +183,7 @@
                 <h2>工效库</h2>
               </div>
             </div>
-            <p class="source-rule">按分部工程、分项工程、具体工种/工序逐级筛选。默认库保留原表46条普适推荐工效，另列1条“管底基础”不可用占位项；补齐工效后方可启用。</p>
+            <p id="library-scope-note" class="source-rule">按分部工程、分项工程、具体工种/工序逐级筛选。默认库保留原表46条普适推荐工效，另列1条“管底基础”不可用占位项；补齐工效后方可启用。</p>
             <div class="library-filters">
               <label>分部工程<select id="library-division-filter"><option value="">全部分部</option></select></label>
               <label>分项工程<select id="library-subitem-filter" disabled><option value="">全部分项</option></select></label>
@@ -209,6 +209,7 @@
                 <h2 id="productivity-form-title">新增工效</h2>
               </div>
             </div>
+            <p id="productivity-scope-note" class="source-rule" hidden></p>
             <form id="productivity-form" class="stack-form">
               <input name="id" type="hidden" />
               <div class="two-col">
@@ -302,7 +303,7 @@
       </div>
     </template>
 
-    <script src="/public-mode.js?v=0.18.0"></script>
-    <script type="module" src="/app.js?v=0.18.0"></script>
+    <script src="/public-mode.js?v=0.19.1-rc.1"></script>
+    <script type="module" src="/app.js?v=0.19.1-rc.1"></script>
   </body>
 </html>

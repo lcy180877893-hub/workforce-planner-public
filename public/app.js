@@ -77,7 +77,29 @@ async function confirmAction(message) {
 
 function canMaintainProductivity() {
   return globalThis.WORKFORCE_PUBLIC_MODE !== true
-    || globalThis.workforcePublicSession?.account?.isAdmin === true;
+    || (globalThis.workforcePublicSession?.account?.canEditProductivity === true
+      && globalThis.workforcePublicSession.account.productivityScope === "personal");
+}
+
+function isPersonalProductivityMode() {
+  return globalThis.WORKFORCE_PUBLIC_MODE === true;
+}
+
+function productivityScopeLabel(item) {
+  if (!isPersonalProductivityMode()) return "";
+  const personal = item.hasPersonalOverride === true || item.catalogScope === "personal";
+  const label = item.hasPersonalOverride === true ? "个人修改" : personal ? "个人新增" : "共享默认";
+  return `<small class="catalog-scope${personal ? " is-personal" : ""}">${label}</small>`;
+}
+
+function configureProductivityScope() {
+  if (!isPersonalProductivityMode()) return;
+  qs("#library-scope-note").textContent = "所有注册用户均可查看共享默认工效。你新增、修改的工效仅用于本人测算；“仅本人隐藏”不改变共享库、其他用户或已保存历史。缺失工效保持不可用、工作内容待补充，补齐后方可启用。";
+  const note = qs("#productivity-scope-note");
+  note.hidden = false;
+  note.textContent = "个人工效版本：新增及修改只对当前登录账户生效，不会修改共享默认库或其他人的工效、历史。";
+  qs("#productivity-form-title").textContent = "新增个人工效";
+  qs("#save-productivity").textContent = "新增个人工效";
 }
 
 function orderedProductivity() {
@@ -870,17 +892,17 @@ function renderLibrary() {
         (item) => `<tr>
           <td>${escapeHtml(item.division)}</td>
           <td>${escapeHtml(item.subitem)}</td>
-          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.name)}${productivityScopeLabel(item)}</td>
           <td><strong>${escapeHtml(item.category)}</strong></td>
           <td>${escapeHtml(item.crewText || crewText(item.crew))}</td>
           <td class="number-cell">${Number.isFinite(item.output) && item.output > 0 ? formatNumber(item.output) : "待补充"}</td>
           <td>${escapeHtml(item.productivityUnit || "待补充")}</td>
-          <td class="work-content">${escapeHtml(item.workContent || "—")}</td>
+          <td class="work-content">${escapeHtml(item.workContent || (isPersonalProductivityMode() ? "待补充" : "—"))}</td>
           <td><span class="status ${item.status === "confirmed" ? "good" : "warn"}">${item.status === "confirmed" ? "可用" : item.status === "unavailable" ? "不可用" : "待核验"}</span></td>
           <td class="row-actions">${canMaintainProductivity() ? `
-            <button class="text-button edit-productivity" type="button" data-id="${escapeHtml(item.id)}">修改</button>
-            <button class="text-button danger delete-productivity" type="button" data-id="${escapeHtml(item.id)}">删除</button>
-            ` : '<span class="muted">仅管理员可维护</span>'}
+            <button class="text-button edit-productivity" type="button" data-id="${escapeHtml(item.id)}">${isPersonalProductivityMode() ? "修改个人版本" : "修改"}</button>
+            <button class="text-button danger delete-productivity" type="button" data-id="${escapeHtml(item.id)}">${isPersonalProductivityMode() ? "仅本人隐藏" : "删除"}</button>
+            ` : '<span class="muted">当前账户只读</span>'}
           </td>
         </tr>`,
       )
@@ -964,23 +986,38 @@ function syncProductivityFormRequirements() {
   const form = qs("#productivity-form");
   const required = form.elements.status.value !== "unavailable";
   for (const name of ["crewText", "output", "productivityUnit"]) form.elements[name].required = required;
+  if (isPersonalProductivityMode() && form.dataset.productivityMode === "role_productivity") form.elements.output.required = false;
 }
 
 function resetProductivityForm() {
   const form = qs("#productivity-form");
   form.reset();
   form.elements.id.value = "";
+  delete form.dataset.productivityMode;
+  delete form.dataset.roleProductivity;
+  delete form.dataset.productivityPreservedFields;
   form.elements.status.value = "confirmed";
   syncProductivityFormRequirements();
   refreshFormDivisions();
-  qs("#productivity-form-title").textContent = "新增工效";
-  qs("#save-productivity").textContent = "新增工效";
+  qs("#productivity-form-title").textContent = isPersonalProductivityMode() ? "新增个人工效" : "新增工效";
+  qs("#save-productivity").textContent = isPersonalProductivityMode() ? "新增个人工效" : "新增工效";
   qs("#cancel-edit").hidden = true;
 }
 
 function beginEdit(item) {
   const form = qs("#productivity-form");
   form.elements.id.value = item.id;
+  // Editing an existing public entry must not silently turn a pump-hour or
+  // role-based record into a crew-day record. The private form keeps its old mode.
+  if (isPersonalProductivityMode()) {
+    form.dataset.productivityMode = item.mode || "crew_day";
+    form.dataset.roleProductivity = JSON.stringify(item.roleProductivity ?? {});
+    // Preserve editable data that this compact form does not display. Never
+    // copy account, permissions or server provenance into the write request.
+    form.dataset.productivityPreservedFields = JSON.stringify({
+      notes: item.notes ?? "", equipment: item.equipment ?? [], source: item.source ?? "后续补充",
+    });
+  }
   refreshFormDivisions(item.division || "其他工程", item.subitem || "未分类分项");
   form.elements.category.value = item.category;
   form.elements.name.value = item.name;
@@ -990,8 +1027,8 @@ function beginEdit(item) {
   form.elements.workContent.value = item.workContent ?? "";
   form.elements.status.value = item.status ?? "confirmed";
   syncProductivityFormRequirements();
-  qs("#productivity-form-title").textContent = "修改工效";
-  qs("#save-productivity").textContent = "保存修改";
+  qs("#productivity-form-title").textContent = isPersonalProductivityMode() ? "修改个人工效版本" : "修改工效";
+  qs("#save-productivity").textContent = isPersonalProductivityMode() ? "保存个人修改" : "保存修改";
   qs("#cancel-edit").hidden = false;
   qs("#save-message").textContent = "";
   qs(".sticky-card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1003,6 +1040,32 @@ async function refreshProductivity() {
   refreshFormDivisions(qs("#form-division").value, qs("#form-subitem").value);
   renderLibrary();
   rebuildWorkRowOptions();
+}
+
+function productivityFormPayload(form) {
+  const productivityUnit = form.elements.productivityUnit.value.trim();
+  const crewConfiguration = form.elements.crewText.value.trim()
+    ? parseCrewConfiguration(form.elements.crewText.value)
+    : { crew: {}, crewText: "" };
+  const preserved = isPersonalProductivityMode() && form.elements.id.value
+    ? JSON.parse(form.dataset.productivityPreservedFields || "{}") : {};
+  return {
+    ...preserved,
+    ...formHierarchy(),
+    category: form.elements.category.value,
+    name: form.elements.name.value,
+    unit: productivityUnit.split("/")[0].trim(),
+    mode: isPersonalProductivityMode() ? form.dataset.productivityMode || "crew_day" : "crew_day",
+    ...(isPersonalProductivityMode() && form.dataset.productivityMode === "role_productivity"
+      ? { roleProductivity: JSON.parse(form.dataset.roleProductivity || "{}") } : {}),
+    crew: crewConfiguration.crew,
+    crewText: crewConfiguration.crewText,
+    output: form.elements.output.value === "" ? null : Number(form.elements.output.value),
+    productivityUnit,
+    workContent: form.elements.workContent.value,
+    source: preserved.source ?? "人工新增工效",
+    status: form.elements.status.value,
+  };
 }
 
 qsa(".tab").forEach((button) => {
@@ -1183,7 +1246,10 @@ qs("#library-rows").addEventListener("click", async (event) => {
     return;
   }
   if (!button.classList.contains("delete-productivity")) return;
-  if (!await confirmAction(`确定删除“${item.name}”吗？删除后该工效将不再参与劳动力测算。`)) return;
+  const confirmation = isPersonalProductivityMode()
+    ? `确定仅对本人隐藏“${item.name}”吗？该工效将不再供你后续测算选择；共享库、其他用户和已保存历史不受影响。`
+    : `确定删除“${item.name}”吗？删除后该工效将不再参与劳动力测算。`;
+  if (!await confirmAction(confirmation)) return;
   button.disabled = true;
   try {
     await api(`/api/productivity/${encodeURIComponent(item.id)}`, { method: "DELETE" });
@@ -1201,7 +1267,7 @@ qs("#productivity-form").elements.status.addEventListener("change", syncProducti
 qs("#productivity-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!canMaintainProductivity()) {
-    qs("#save-message").textContent = "共享工效库仅管理员可维护。";
+    qs("#save-message").textContent = "当前连接尚未启用个人工效编辑，请刷新后重试；不会修改共享工效库。";
     return;
   }
   const form = event.currentTarget;
@@ -1209,24 +1275,7 @@ qs("#productivity-form").addEventListener("submit", async (event) => {
   const button = event.submitter;
   button.disabled = true;
   try {
-    const productivityUnit = form.elements.productivityUnit.value.trim();
-    const crewConfiguration = form.elements.crewText.value.trim()
-      ? parseCrewConfiguration(form.elements.crewText.value)
-      : { crew: {}, crewText: "" };
-    const payload = {
-      ...formHierarchy(),
-      category: form.elements.category.value,
-      name: form.elements.name.value,
-      unit: productivityUnit.split("/")[0].trim(),
-      mode: "crew_day",
-      crew: crewConfiguration.crew,
-      crewText: crewConfiguration.crewText,
-      output: form.elements.output.value === "" ? null : Number(form.elements.output.value),
-      productivityUnit,
-      workContent: form.elements.workContent.value,
-      source: "人工新增工效",
-      status: form.elements.status.value,
-    };
+    const payload = productivityFormPayload(form);
     const id = form.elements.id.value;
     const result = await api(id ? `/api/productivity/${encodeURIComponent(id)}` : "/api/productivity", {
       method: id ? "PUT" : "POST",
@@ -1234,7 +1283,9 @@ qs("#productivity-form").addEventListener("submit", async (event) => {
     });
     resetProductivityForm();
     message.className = "hint is-success";
-    message.textContent = `已保存：${result.saved.name}`;
+    message.textContent = isPersonalProductivityMode()
+      ? `已保存个人工效：${result.saved.name}。仅本人后续测算采用，不影响共享库、其他用户及已保存历史。`
+      : `已保存：${result.saved.name}`;
     await refreshProductivity();
   } catch (error) {
     message.className = "hint is-error";
@@ -1245,6 +1296,7 @@ qs("#productivity-form").addEventListener("submit", async (event) => {
 });
 
 try {
+  configureProductivityScope();
   if (!canMaintainProductivity()) qs("#productivity-maintenance").hidden = true;
   await refreshProductivity();
   addDivision();
