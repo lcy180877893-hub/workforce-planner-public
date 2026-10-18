@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Candidate configuration only. Review in the Dashboard before creating resources.
+# External Neon database: intentionally no Render databases, disks or paid workers.
+services:
+  - type: web
+    name: workforce-planner-public
+    runtime: node
+    region: singapore
+    plan: free
+    autoDeployTrigger: "off"
+    buildCommand: corepack enable && corepack prepare pnpm@11.25.0 --activate && pnpm install --frozen-lockfile --prod --ignore-scripts && pnpm preflight
+    # The free plan has no pre-deploy command. Migrations are idempotent and
+    # explicitly run before the HTTP process, never from an HTTP handler.
+    startCommand: pnpm migrate && pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH0_ISSUER_BASE_URL
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true

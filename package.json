@@ -1,0 +1,34 @@
+{
+  "name": "workforce-planner-public",
+  "version": "0.19.0-rc.1",
+  "private": true,
+  "type": "module",
+  "description": "基于跨项目工效库的工程量、工期与劳动力方案测算插件",
+  "author": {
+    "name": "李旭峰",
+    "email": "lixufeng@cccc4-2ksa.com"
+  },
+  "scripts": {
+    "start": "node src/public-server.js",
+    "dev": "node --watch src/public-server.js",
+    "migrate": "node src/migrate-public.js",
+    "preflight": "node scripts/release-preflight.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=24.19 <25"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "express": "^5.3.0",
+    "zod": "^4.6.7",
+    "express-openid-connect": "3.4.0",
+    "jose": "6.2.12",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "yaml": "2.9.1"
+  }
+}

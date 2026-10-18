@@ -1,0 +1,538 @@
+{
+  "schemaVersion": 1,
+  "purpose": "release-preparation-not-production",
+  "sourceDigest": "f9fbac522dcedb0110e19ecd5f6c75fc7f6049b46308718a3a8f4a2ffd3f9fb9",
+  "sourceFiles": [
+    {
+      "path": "package.json",
+      "bytes": 491,
+      "sha256": "7f57836bd7c9af29817b3576c84f66fb5db822f0782cd5cd6f60a5eff2b9b381"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "bytes": 23798,
+      "sha256": "5f8744d0dbaef5dabd37344768a57eea2aad906ccf60d66686436ef29bb0a097"
+    },
+    {
+      "path": "public/app.js",
+      "bytes": 62301,
+      "sha256": "bf3440980bd15346f49521a851cf67ae89cf28c0dd85245b6d32910b9aa3d964"
+    },
+    {
+      "path": "public/calendar.js",
+      "bytes": 7074,
+      "sha256": "d3947415c9e36f11e64975ad0370831c301faa56e3108a6033102f64d9ea4a7f"
+    },
+    {
+      "path": "public/chatgpt-bridge.js",
+      "bytes": 12621,
+      "sha256": "7b91bee03a44209b8fe84303155f53d1691995a4b8c4b63917b6ecabecdeedde"
+    },
+    {
+      "path": "public/chatgpt-ui.js",
+      "bytes": 27902,
+      "sha256": "54927969127c0869866c11642c72f66ae5315379fad652a8011e8a41f5680ab6"
+    },
+    {
+      "path": "public/chatgpt.css",
+      "bytes": 2609,
+      "sha256": "2d5024aadd282f49bb9b2856de5bfe71dfed688ca896c99d6ff8646e36043d34"
+    },
+    {
+      "path": "public/index.html",
+      "bytes": 16582,
+      "sha256": "655a58cb46d6b6dd3d4ab5c7d53343e17780868ed396d3cfeeefc4fd7d246bd8"
+    },
+    {
+      "path": "public/plan-visualizations.js",
+      "bytes": 10226,
+      "sha256": "b196fe5ce5a1be630bbf2d4cad6c51c0778f87922bbafaa475ca6fcdfe5484bd"
+    },
+    {
+      "path": "public/schedule-charts.js",
+      "bytes": 9322,
+      "sha256": "e2c8d42f531d19a0e8d1014e73873dc80b9e77d0d5f43940cca91e0f411f0f26"
+    },
+    {
+      "path": "public/styles.css",
+      "bytes": 18209,
+      "sha256": "17d9a269006d2de4c001af596b43bf9ba7e80a3a743e24b7045e96c9e8ed3753"
+    },
+    {
+      "path": "src/ai-review.js",
+      "bytes": 8832,
+      "sha256": "eb7cba6031cde5cc0d3ec6a6b120f977f658dcd69bc76775655303f11b0b025f"
+    },
+    {
+      "path": "src/chatgpt-ui.js",
+      "bytes": 3586,
+      "sha256": "0326a0306a2df86bf19974ce409cbd620985d6b0a8056f383f29222af63af31c"
+    },
+    {
+      "path": "src/mcp.js",
+      "bytes": 16077,
+      "sha256": "1b2b1e7cd54352098919c4e41f2f99327981cad8db69381c65077307de671d39"
+    },
+    {
+      "path": "src/plan-history-store.js",
+      "bytes": 4217,
+      "sha256": "ce891a5776cc5924ed7a5ee119c3c3f4c020afe6f7ab95c639bdc6b0afc806f6"
+    },
+    {
+      "path": "src/planner.js",
+      "bytes": 16198,
+      "sha256": "05e9713b8695326869c684f64bc0df8da8f7d423865ab829110fb9421dedc1bf"
+    },
+    {
+      "path": "src/planning-service.js",
+      "bytes": 1210,
+      "sha256": "6aac167f3d578e17a8f59742cd81ff98ef16327bbb4fdc8c4ec0e89f5c49e804"
+    },
+    {
+      "path": "src/productivity-data.js",
+      "bytes": 9649,
+      "sha256": "4197132817e7ef76cd395c5a3125786332dc88c97db0ab56c18c27f196cec288"
+    },
+    {
+      "path": "src/productivity-hierarchy.js",
+      "bytes": 2712,
+      "sha256": "145f0d1f228b73f7b56405602228e0f78281b88eec05d40093e15c88f2fa4e90"
+    },
+    {
+      "path": "src/productivity-store.js",
+      "bytes": 8428,
+      "sha256": "cf2058c4dc4eda50e9a67c342e21d284d4ee7a725e1019061e3f5f8e23d90a8a"
+    },
+    {
+      "path": "src/project-review.js",
+      "bytes": 20969,
+      "sha256": "70e8bc4daacb5598162fd1c91cbc8d985172f3b44f8fdc605b173cd061a46a75"
+    },
+    {
+      "path": "src/public-productivity-store.js",
+      "bytes": 963,
+      "sha256": "6e30cc1feeb4818f67b3157619a3d9e38dfadede5c3eed48490c2299100e5d7c"
+    },
+    {
+      "path": "src/scheduler.js",
+      "bytes": 29887,
+      "sha256": "fc650deefe1e3bb226cc822f9f5cfe11dcafc767389fec497e8f2c542671653a"
+    },
+    {
+      "path": "src/server.js",
+      "bytes": 4929,
+      "sha256": "b1dceff75b5e03ed3b225edf845975da091290ebe13f215b57c0182613ff4714"
+    },
+    {
+      "path": "src/workflow.js",
+      "bytes": 4730,
+      "sha256": "0c357731fd7ba8997426a2692b55d9c1fd4b44f4a4e99859ce27256d02d1362d"
+    },
+    {
+      "path": "test/ai-review.test.js",
+      "bytes": 8770,
+      "sha256": "29b16726edbb8a310dd579d97c2d0856426fb207adada31c61f3055bfc527163"
+    },
+    {
+      "path": "test/chatgpt-bridge.test.js",
+      "bytes": 13456,
+      "sha256": "6652f3452ee2f8de1ff3f220443262400dc0a58a6b077d4968278bac6e5c4f8b"
+    },
+    {
+      "path": "test/chatgpt-bundle.test.js",
+      "bytes": 1506,
+      "sha256": "b9fada0f41f40f72c4264bd51db1813a3201c3f0b28c3217321c8c52c70c1668"
+    },
+    {
+      "path": "test/chatgpt-mcp.test.js",
+      "bytes": 21483,
+      "sha256": "87bb4e638e8369ae57bb4fddefc40448c618bec1809d5f14da4c1012e5090f61"
+    },
+    {
+      "path": "test/chatgpt-ui.test.js",
+      "bytes": 38145,
+      "sha256": "e83bcea48dc8069c119d75f97f824fc275cfb959e62b826749c1fbc5ad06b351"
+    },
+    {
+      "path": "test/fixtures/resource-preview.mjs",
+      "bytes": 7690,
+      "sha256": "61660f7e9091c10d704cda17a71b7e36cc6c046c7d2b192918352e8099fb3c91"
+    },
+    {
+      "path": "test/mcp.test.js",
+      "bytes": 7351,
+      "sha256": "7e21f71b42e4580e799be5aaaf787fe2145871cbeb4d716f8ff89535fb25dfaa"
+    },
+    {
+      "path": "test/multi-crew-overlap.test.js",
+      "bytes": 13239,
+      "sha256": "b4c68643303b94035bb730ec3e307fca0bc1deb0ae6837a2c019f6e1fb6f0571"
+    },
+    {
+      "path": "test/plan-history-store.test.js",
+      "bytes": 4259,
+      "sha256": "edc6119c2bfbeafa8dd45ab6d2bfc2e9a7036a9087f4f89f9d29fd5438a73b04"
+    },
+    {
+      "path": "test/plan-visualizations.test.js",
+      "bytes": 7344,
+      "sha256": "6f43d71d03d44f232594101caa228b47fab60c9055987acf3476e0d4308609c6"
+    },
+    {
+      "path": "test/planner.test.js",
+      "bytes": 26539,
+      "sha256": "e70de9564c9ec05ed73d307aa4f3d25d493db208e4e266815743ec6514fa7692"
+    },
+    {
+      "path": "test/planning-service.test.js",
+      "bytes": 11827,
+      "sha256": "d9896590ed92d8a2933f38a606c9db8ee0fa55f135cf7e45e06a7302d217c55c"
+    },
+    {
+      "path": "test/private-plugin.test.js",
+      "bytes": 21961,
+      "sha256": "c1b2b93d8f441ca0ce3d35fdcdce8bcf631c145f6f53549ebc51e954efed5668"
+    },
+    {
+      "path": "test/productivity-store.test.js",
+      "bytes": 6490,
+      "sha256": "59e9d6a22108c53bb5111d7386f8f77c26584e87ddd649c156108386c1678343"
+    },
+    {
+      "path": "test/project-review.test.js",
+      "bytes": 13418,
+      "sha256": "94388ff39cd3c0eca77d90eb821e44894ba352babb0e59b213eaa168e9652896"
+    },
+    {
+      "path": "test/public-http.test.js",
+      "bytes": 1731,
+      "sha256": "3143f353f1bfdf9ad18785ad8b20a28fe9510ab254fda69949c396f9e38493c2"
+    },
+    {
+      "path": "test/public-plugin.test.js",
+      "bytes": 3270,
+      "sha256": "fa387291d2ef4b9537b1bc80755392797f283a4bb477d927ddb1b1b533537b1c"
+    },
+    {
+      "path": "test/resource-scheduling.test.js",
+      "bytes": 15661,
+      "sha256": "0f8e0f2c406b1de141347684e09733bbfcda523d7d2d82988f0e94bc3d808ef0"
+    },
+    {
+      "path": "test/resource-ui.test.js",
+      "bytes": 12730,
+      "sha256": "2ccf9aad1fd227cd22d9a05ead7d5c685d5bc5b1158685e674be5096b9f0ff8a"
+    },
+    {
+      "path": "test/reviewed-planner.test.js",
+      "bytes": 16317,
+      "sha256": "9d4a2bc10ff656dd0cad3ae094d8bd54458c6309149413bfda13e59c0ba92ffb"
+    },
+    {
+      "path": "test/schedule-charts.test.js",
+      "bytes": 13834,
+      "sha256": "1706e54ca58d4c9c213223a77cd2dbcf863840e1dfdc0eb7c3e39532c245da32"
+    },
+    {
+      "path": "test/single-crew-overlap.test.js",
+      "bytes": 12719,
+      "sha256": "5b8d57654ff433842e66405b7c8cf492a6e34d8b5547135b52f3303a4018b13b"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".gitignore",
+      "kind": "generated",
+      "bytes": 1599,
+      "sha256": "167a2108d21d6e2ccb58fa3f6dc168ebd1a56fe171efe2dc451c5253bd78fa38"
+    },
+    {
+      "path": "package.json",
+      "kind": "source",
+      "bytes": 491,
+      "sha256": "7f57836bd7c9af29817b3576c84f66fb5db822f0782cd5cd6f60a5eff2b9b381"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "kind": "source",
+      "bytes": 23798,
+      "sha256": "5f8744d0dbaef5dabd37344768a57eea2aad906ccf60d66686436ef29bb0a097"
+    },
+    {
+      "path": "public/app.js",
+      "kind": "source",
+      "bytes": 62301,
+      "sha256": "bf3440980bd15346f49521a851cf67ae89cf28c0dd85245b6d32910b9aa3d964"
+    },
+    {
+      "path": "public/calendar.js",
+      "kind": "source",
+      "bytes": 7074,
+      "sha256": "d3947415c9e36f11e64975ad0370831c301faa56e3108a6033102f64d9ea4a7f"
+    },
+    {
+      "path": "public/chatgpt-bridge.js",
+      "kind": "source",
+      "bytes": 12621,
+      "sha256": "7b91bee03a44209b8fe84303155f53d1691995a4b8c4b63917b6ecabecdeedde"
+    },
+    {
+      "path": "public/chatgpt-ui.js",
+      "kind": "source",
+      "bytes": 27902,
+      "sha256": "54927969127c0869866c11642c72f66ae5315379fad652a8011e8a41f5680ab6"
+    },
+    {
+      "path": "public/chatgpt.css",
+      "kind": "source",
+      "bytes": 2609,
+      "sha256": "2d5024aadd282f49bb9b2856de5bfe71dfed688ca896c99d6ff8646e36043d34"
+    },
+    {
+      "path": "public/index.html",
+      "kind": "source",
+      "bytes": 16582,
+      "sha256": "655a58cb46d6b6dd3d4ab5c7d53343e17780868ed396d3cfeeefc4fd7d246bd8"
+    },
+    {
+      "path": "public/plan-visualizations.js",
+      "kind": "source",
+      "bytes": 10226,
+      "sha256": "b196fe5ce5a1be630bbf2d4cad6c51c0778f87922bbafaa475ca6fcdfe5484bd"
+    },
+    {
+      "path": "public/schedule-charts.js",
+      "kind": "source",
+      "bytes": 9322,
+      "sha256": "e2c8d42f531d19a0e8d1014e73873dc80b9e77d0d5f43940cca91e0f411f0f26"
+    },
+    {
+      "path": "public/styles.css",
+      "kind": "source",
+      "bytes": 18209,
+      "sha256": "17d9a269006d2de4c001af596b43bf9ba7e80a3a743e24b7045e96c9e8ed3753"
+    },
+    {
+      "path": "RELEASE-STATUS.md",
+      "kind": "generated",
+      "bytes": 1528,
+      "sha256": "bb41daf381e5bdd0857fa74b21718943987824a66c043c419f6ebe6b336dc869"
+    },
+    {
+      "path": "src/ai-review.js",
+      "kind": "source",
+      "bytes": 8832,
+      "sha256": "eb7cba6031cde5cc0d3ec6a6b120f977f658dcd69bc76775655303f11b0b025f"
+    },
+    {
+      "path": "src/chatgpt-ui.js",
+      "kind": "source",
+      "bytes": 3586,
+      "sha256": "0326a0306a2df86bf19974ce409cbd620985d6b0a8056f383f29222af63af31c"
+    },
+    {
+      "path": "src/mcp.js",
+      "kind": "source",
+      "bytes": 16077,
+      "sha256": "1b2b1e7cd54352098919c4e41f2f99327981cad8db69381c65077307de671d39"
+    },
+    {
+      "path": "src/plan-history-store.js",
+      "kind": "source",
+      "bytes": 4217,
+      "sha256": "ce891a5776cc5924ed7a5ee119c3c3f4c020afe6f7ab95c639bdc6b0afc806f6"
+    },
+    {
+      "path": "src/planner.js",
+      "kind": "source",
+      "bytes": 16198,
+      "sha256": "05e9713b8695326869c684f64bc0df8da8f7d423865ab829110fb9421dedc1bf"
+    },
+    {
+      "path": "src/planning-service.js",
+      "kind": "source",
+      "bytes": 1210,
+      "sha256": "6aac167f3d578e17a8f59742cd81ff98ef16327bbb4fdc8c4ec0e89f5c49e804"
+    },
+    {
+      "path": "src/productivity-data.js",
+      "kind": "source",
+      "bytes": 9649,
+      "sha256": "4197132817e7ef76cd395c5a3125786332dc88c97db0ab56c18c27f196cec288"
+    },
+    {
+      "path": "src/productivity-hierarchy.js",
+      "kind": "source",
+      "bytes": 2712,
+      "sha256": "145f0d1f228b73f7b56405602228e0f78281b88eec05d40093e15c88f2fa4e90"
+    },
+    {
+      "path": "src/productivity-store.js",
+      "kind": "source",
+      "bytes": 8428,
+      "sha256": "cf2058c4dc4eda50e9a67c342e21d284d4ee7a725e1019061e3f5f8e23d90a8a"
+    },
+    {
+      "path": "src/project-review.js",
+      "kind": "source",
+      "bytes": 20969,
+      "sha256": "70e8bc4daacb5598162fd1c91cbc8d985172f3b44f8fdc605b173cd061a46a75"
+    },
+    {
+      "path": "src/public-productivity-store.js",
+      "kind": "source",
+      "bytes": 963,
+      "sha256": "6e30cc1feeb4818f67b3157619a3d9e38dfadede5c3eed48490c2299100e5d7c"
+    },
+    {
+      "path": "src/scheduler.js",
+      "kind": "source",
+      "bytes": 29887,
+      "sha256": "fc650deefe1e3bb226cc822f9f5cfe11dcafc767389fec497e8f2c542671653a"
+    },
+    {
+      "path": "src/server.js",
+      "kind": "source",
+      "bytes": 4929,
+      "sha256": "b1dceff75b5e03ed3b225edf845975da091290ebe13f215b57c0182613ff4714"
+    },
+    {
+      "path": "src/workflow.js",
+      "kind": "source",
+      "bytes": 4730,
+      "sha256": "0c357731fd7ba8997426a2692b55d9c1fd4b44f4a4e99859ce27256d02d1362d"
+    },
+    {
+      "path": "test/ai-review.test.js",
+      "kind": "source",
+      "bytes": 8770,
+      "sha256": "29b16726edbb8a310dd579d97c2d0856426fb207adada31c61f3055bfc527163"
+    },
+    {
+      "path": "test/chatgpt-bridge.test.js",
+      "kind": "source",
+      "bytes": 13456,
+      "sha256": "6652f3452ee2f8de1ff3f220443262400dc0a58a6b077d4968278bac6e5c4f8b"
+    },
+    {
+      "path": "test/chatgpt-bundle.test.js",
+      "kind": "source",
+      "bytes": 1506,
+      "sha256": "b9fada0f41f40f72c4264bd51db1813a3201c3f0b28c3217321c8c52c70c1668"
+    },
+    {
+      "path": "test/chatgpt-mcp.test.js",
+      "kind": "source",
+      "bytes": 21483,
+      "sha256": "87bb4e638e8369ae57bb4fddefc40448c618bec1809d5f14da4c1012e5090f61"
+    },
+    {
+      "path": "test/chatgpt-ui.test.js",
+      "kind": "source",
+      "bytes": 38145,
+      "sha256": "e83bcea48dc8069c119d75f97f824fc275cfb959e62b826749c1fbc5ad06b351"
+    },
+    {
+      "path": "test/fixtures/resource-preview.mjs",
+      "kind": "source",
+      "bytes": 7690,
+      "sha256": "61660f7e9091c10d704cda17a71b7e36cc6c046c7d2b192918352e8099fb3c91"
+    },
+    {
+      "path": "test/mcp.test.js",
+      "kind": "source",
+      "bytes": 7351,
+      "sha256": "7e21f71b42e4580e799be5aaaf787fe2145871cbeb4d716f8ff89535fb25dfaa"
+    },
+    {
+      "path": "test/multi-crew-overlap.test.js",
+      "kind": "source",
+      "bytes": 13239,
+      "sha256": "b4c68643303b94035bb730ec3e307fca0bc1deb0ae6837a2c019f6e1fb6f0571"
+    },
+    {
+      "path": "test/plan-history-store.test.js",
+      "kind": "source",
+      "bytes": 4259,
+      "sha256": "edc6119c2bfbeafa8dd45ab6d2bfc2e9a7036a9087f4f89f9d29fd5438a73b04"
+    },
+    {
+      "path": "test/plan-visualizations.test.js",
+      "kind": "source",
+      "bytes": 7344,
+      "sha256": "6f43d71d03d44f232594101caa228b47fab60c9055987acf3476e0d4308609c6"
+    },
+    {
+      "path": "test/planner.test.js",
+      "kind": "source",
+      "bytes": 26539,
+      "sha256": "e70de9564c9ec05ed73d307aa4f3d25d493db208e4e266815743ec6514fa7692"
+    },
+    {
+      "path": "test/planning-service.test.js",
+      "kind": "source",
+      "bytes": 11827,
+      "sha256": "d9896590ed92d8a2933f38a606c9db8ee0fa55f135cf7e45e06a7302d217c55c"
+    },
+    {
+      "path": "test/private-plugin.test.js",
+      "kind": "source",
+      "bytes": 21961,
+      "sha256": "c1b2b93d8f441ca0ce3d35fdcdce8bcf631c145f6f53549ebc51e954efed5668"
+    },
+    {
+      "path": "test/productivity-store.test.js",
+      "kind": "source",
+      "bytes": 6490,
+      "sha256": "59e9d6a22108c53bb5111d7386f8f77c26584e87ddd649c156108386c1678343"
+    },
+    {
+      "path": "test/project-review.test.js",
+      "kind": "source",
+      "bytes": 13418,
+      "sha256": "94388ff39cd3c0eca77d90eb821e44894ba352babb0e59b213eaa168e9652896"
+    },
+    {
+      "path": "test/public-http.test.js",
+      "kind": "source",
+      "bytes": 1731,
+      "sha256": "3143f353f1bfdf9ad18785ad8b20a28fe9510ab254fda69949c396f9e38493c2"
+    },
+    {
+      "path": "test/public-plugin.test.js",
+      "kind": "source",
+      "bytes": 3270,
+      "sha256": "fa387291d2ef4b9537b1bc80755392797f283a4bb477d927ddb1b1b533537b1c"
+    },
+    {
+      "path": "test/resource-scheduling.test.js",
+      "kind": "source",
+      "bytes": 15661,
+      "sha256": "0f8e0f2c406b1de141347684e09733bbfcda523d7d2d82988f0e94bc3d808ef0"
+    },
+    {
+      "path": "test/resource-ui.test.js",
+      "kind": "source",
+      "bytes": 12730,
+      "sha256": "2ccf9aad1fd227cd22d9a05ead7d5c685d5bc5b1158685e674be5096b9f0ff8a"
+    },
+    {
+      "path": "test/reviewed-planner.test.js",
+      "kind": "source",
+      "bytes": 16317,
+      "sha256": "9d4a2bc10ff656dd0cad3ae094d8bd54458c6309149413bfda13e59c0ba92ffb"
+    },
+    {
+      "path": "test/schedule-charts.test.js",
+      "kind": "source",
+      "bytes": 13834,
+      "sha256": "1706e54ca58d4c9c213223a77cd2dbcf863840e1dfdc0eb7c3e39532c245da32"
+    },
+    {
+      "path": "test/single-crew-overlap.test.js",
+      "kind": "source",
+      "bytes": 12719,
+      "sha256": "5b8d57654ff433842e66405b7c8cf492a6e34d8b5547135b52f3303a4018b13b"
+    }
+  ]
+}
