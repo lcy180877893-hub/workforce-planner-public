@@ -6,11 +6,19 @@ import path from "node:path";
 import { ProductivityStore } from "../src/productivity-store.js";
 import { hierarchyEntryCount } from "../src/productivity-hierarchy.js";
 
-test("默认库保留46条已确认工效和1条不可用的管底基础占位项", async () => {
+test("公共默认库保留46条已确认工效、管底基础及111条授权补充目录", async () => {
   const items = await new ProductivityStore().list();
-  assert.equal(items.length, 47);
+  assert.equal(items.length, 158);
   assert.equal(hierarchyEntryCount, 47);
-  assert.equal(items.every((item) => item.division && item.subitem && item.hierarchyOrder), true);
+  assert.equal(items.every((item) => item.division && item.subitem), true);
+  const expansion = items.filter((item) => item.id.startsWith("image-20261018-"));
+  assert.equal(expansion.length, 111);
+  assert.equal(expansion.filter((item) => item.id.includes("-fdn-")).length, 68);
+  assert.equal(expansion.filter((item) => item.id.includes("-str-")).length, 43);
+  assert.ok(expansion.every((item) => item.status === "unavailable"
+    && item.workContent === "待补充" && item.output === null && item.unit === ""
+    && Object.keys(item.crew).length === 0 && Object.keys(item.roleProductivity).length === 0));
+  assert.equal(items.filter((item) => item.status === "unavailable").length, 112);
   assert.equal(new Set(items.map((item) => item.division)).size, 6);
   assert.deepEqual(
     [items.find((item) => item.name === "筏板养护").division, items.find((item) => item.name === "筏板养护").subitem],

@@ -17,7 +17,8 @@ const authConfig = loadPublicConfig({
 const principalFor = (subject = "auth0|alice", scope = PUBLIC_SCOPES.join(" ")) => principalFromClaims({
   iss: authConfig.issuer, sub: subject, name: subject === "auth0|alice" ? "Alice" : "Other user", scope,
 }, authConfig);
-const accountFor = (principal) => ({ id: principal.id, displayName: principal.displayName, isAdmin: principal.isAdmin });
+const accountFor = (principal) => ({ id: principal.id, displayName: principal.displayName, isAdmin: principal.isAdmin,
+  canEditProductivity: true, productivityScope: "personal" });
 
 const definitions = [
   { id: "test-rebar", name: "钢筋绑扎与安装", division: "主体结构工程", subitem: "钢筋工程", category: "钢筋工",
@@ -158,7 +159,7 @@ test("cloud tool discovery advertises OAuth scopes and versioned embedded templa
   assert.deepEqual(profile.outputSchema.required.sort(), ["id", "name"]);
 });
 
-test("ordinary authenticated users can read public productivity but cannot maintain it even with write scope", async (t) => {
+test("ordinary authenticated users can maintain their personal productivity with write scope; forged ownership is not forwarded", async (t) => {
   const f = await fixture(t);
   const catalog = await f.client.callTool({ name: "list_productivity", arguments: { search: "钢筋" } });
   assert.equal(catalog.isError, undefined);
@@ -169,11 +170,19 @@ test("ordinary authenticated users can read public productivity but cannot maint
     ["delete_productivity", { id: "test-rebar", isAdmin: true, ownerId: "auth0|admin" }],
   ]) {
     const result = await f.client.callTool({ name, arguments: args });
-    assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /只有管理员/u);
-    assert.equal(result._meta?.["mcp/www_authenticate"], undefined, "管理员权限不足不能触发重复 OAuth");
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.account.canEditProductivity, true);
+    assert.equal(result.structuredContent.account.productivityScope, "personal");
+    assert.equal(result._meta?.["mcp/www_authenticate"], undefined);
   }
-  assert.equal(f.calls.some(([name]) => name === "productivity-upsert" || name === "productivity-delete"), false);
+  const saved = f.calls.find(([name]) => name === "productivity-upsert")[1];
+  assert.equal(saved.ownerId, undefined);
+  assert.equal(saved.isAdmin, undefined);
+  assert.equal(f.calls.some(([name]) => name === "productivity-delete"), true);
+  const partial = await f.client.callTool({ name: "upsert_productivity", arguments: { id: "test-rebar", output: 25 } });
+  assert.equal(partial.isError, undefined, "cloud MCP permits an output-only patch; store validates required fields for additions");
+  const patch = f.calls.filter(([name]) => name === "productivity-upsert").at(-1)[1];
+  assert.deepEqual(patch, { id: "test-rebar", output: 25 }, "MCP must not inject default mode, crew or empty applicability fields");
 });
 
 test("write scopes are enforced independently of admin and produce a scoped OAuth challenge", async (t) => {

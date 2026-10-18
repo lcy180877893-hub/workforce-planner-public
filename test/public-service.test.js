@@ -4,7 +4,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from "jose";
 import { createPublicApp, createPublicPool } from "../src/public-server.js";
 import { createPublicAuth, loadPublicConfig, principalFromClaims } from "../src/public-auth.js";
-import { migrateDatabase, PostgresProductivityStore } from "../src/cloud-stores.js";
+import { migrateDatabase, PostgresProductivityStore, PostgresPersonalProductivityStore } from "../src/cloud-stores.js";
 
 const config = loadPublicConfig({
   PUBLIC_ORIGIN: "https://workforce.example", AUTH0_ISSUER_BASE_URL: "https://synthetic.auth0.com",
@@ -100,7 +100,7 @@ test("website serves public mode at every HTML entry; no private files or cache"
   }
   for (const path of ["/.env", "/data/plan-history.json", "/src/cloud-stores.js", "/release-manifest.json"]) assert.equal((await call(path)).status, 404);
   assert.match((await call("/public-release.js")).raw, /WORKFORCE_PUBLIC_MODE = true/);
-  assert.equal((await call("/health")).body.version, "0.19.0-rc.1");
+  assert.equal((await call("/health")).body.version, "0.19.1-rc.1");
   assert.equal((await call("/ready")).status, 200);
   assert.equal((await call("/api/session")).body.authenticated, false);
 });
@@ -116,13 +116,88 @@ test("HTTP identity is verified JWT, never body, role, account hint or wrong aud
   const alice = await token();
   const session = await call("/api/session", { bearer: alice });
   assert.equal(session.body.user.isAdmin, false, "forged JWT role is ignored even when token is signed");
+  assert.equal(session.body.user.canEditProductivity, true);
+  assert.equal(session.body.user.productivityScope, "personal");
   assert.equal((await call("/api/productivity", { bearer: alice })).body.items.length, 2);
   assert.equal((await call("/api/productivity", { bearer: alice, headers: { "X-Workforce-Account": "other-user" } })).status, 401);
-  assert.equal((await call("/api/productivity", { bearer: alice, method: "POST", body: { ...definitions[0], isAdmin: true, userId: "auth0|admin" } })).status, 403);
-  assert.equal((await call("/api/productivity/synthetic-steel", { bearer: alice, method: "DELETE" })).status, 403);
+  assert.equal((await call("/api/productivity", { bearer: alice, method: "POST", body: { ...definitions[0], isAdmin: true, userId: "auth0|admin" } })).status, 400);
+  assert.equal((await call("/api/productivity/synthetic-steel", { bearer: alice, method: "DELETE" })).status, 200);
   const readOnly = await call("/api/project-review", { bearer: await token("auth0|reader", "workforce:read"), method: "POST", body: projectInput() });
   assert.equal(readOnly.status, 403); assert.match(readOnly.headers.get("www-authenticate"), /insufficient_scope/);
   assert.equal((await call("/api/productivity/synthetic-steel", { bearer: await token("auth0|admin"), method: "PUT", body: { ...definitions[0], output: 11 } })).status, 200);
+});
+
+test("HTTP edits, additions and hides belong only to the verified account, including admin sessions", async (t) => {
+  const { call, pool } = await fixture(t);
+  const alice = await token(); const bob = await token("auth0|bob"); const admin = await token("auth0|admin");
+  const sharedBefore = (await pool.query("SELECT id, entry FROM public_productivity ORDER BY id")).rows;
+  const saved = await call("/api/productivity/synthetic-steel", { bearer: alice, method: "PUT", body: { ...definitions[0], output: 25 } });
+  assert.equal(saved.status, 200, saved.raw);
+  assert.equal(saved.body.saved.catalogScope, "personal");
+  assert.equal(saved.body.saved.hasPersonalOverride, true);
+  const added = await call("/api/productivity", { bearer: alice, method: "POST", body: { ...definitions[0], id: "alice-only", name: "仅甲个人工序" } });
+  assert.equal(added.status, 200);
+  const aliceList = (await call("/api/productivity", { bearer: alice })).body.items;
+  const bobList = (await call("/api/productivity", { bearer: bob })).body.items;
+  assert.equal(aliceList.length, 3);
+  assert.equal(bobList.length, 2);
+  assert.equal(aliceList.find((entry) => entry.id === "synthetic-steel").output, 25);
+  assert.equal(bobList.find((entry) => entry.id === "synthetic-steel").output, 10);
+  assert.equal((await call("/api/productivity/alice-only", { bearer: bob, method: "DELETE" })).status, 404);
+  assert.equal((await call("/api/productivity/synthetic-pour", { bearer: alice, method: "DELETE" })).status, 200);
+  assert.equal((await call("/api/productivity", { bearer: alice })).body.items.some((entry) => entry.id === "synthetic-pour"), false);
+  assert.equal((await call("/api/productivity", { bearer: bob })).body.items.some((entry) => entry.id === "synthetic-pour"), true);
+  assert.equal((await call("/api/productivity/synthetic-steel", { bearer: admin, method: "PUT", body: { ...definitions[0], output: 99 } })).status, 200);
+  assert.deepEqual((await pool.query("SELECT id, entry FROM public_productivity ORDER BY id")).rows, sharedBefore,
+    "all public API writes including administrators are personal overlays");
+  assert.equal((await pool.query("SELECT count(*)::integer AS total FROM public_plan_history")).rows[0].total, 0);
+  assert.equal((await pool.query("SELECT count(*)::integer AS total FROM public_plan_usage")).rows[0].total, 0);
+});
+
+test("HTTP prepare and generate use the current owner's rates and stale reviews cannot create history", async (t) => {
+  const { call } = await fixture(t);
+  const alice = await token(); const bob = await token("auth0|bob"); const input = projectInput();
+  const before = await call("/api/project-review", { bearer: alice, method: "POST", body: input });
+  const edit = await call("/api/productivity/synthetic-steel", { bearer: alice, method: "PUT", body: { ...definitions[0], output: 20 } });
+  assert.equal(edit.status, 200);
+  const after = await call("/api/project-review", { bearer: alice, method: "POST", body: input });
+  const other = await call("/api/project-review", { bearer: bob, method: "POST", body: input });
+  assert.equal(other.body.fingerprint, before.body.fingerprint);
+  assert.notEqual(after.body.fingerprint, before.body.fingerprint);
+  assert.equal(after.body.workItems[0].productivity.output, 20);
+  const stale = await call("/api/workforce-plan", { bearer: alice, method: "POST", body: { ...input, requestId: "stale-personal-review", constructionReview: review(before.body) } });
+  assert.equal(stale.status, 400);
+  assert.equal((await call("/api/workforce-history", { bearer: alice })).body.items.length, 0);
+  const request = { ...input, requestId: "personal-reviewed-plan", constructionReview: review(after.body) };
+  const saved = await call("/api/workforce-plan", { bearer: alice, method: "POST", body: request });
+  assert.equal(saved.status, 200, saved.raw);
+  assert.equal(saved.body.account.productivityScope, "personal");
+  await call("/api/productivity/synthetic-steel", { bearer: alice, method: "PUT", body: { ...definitions[0], output: 30 } });
+  const replay = await call("/api/workforce-plan", { bearer: alice, method: "POST", body: request });
+  assert.equal(replay.body.history.id, saved.body.history.id, "same saved request remains immutable after later rate edits");
+  assert.deepEqual(replay.body.workItems, saved.body.workItems);
+});
+
+test("authenticated MCP requests are wired to the same personal store as the website API", async (t) => {
+  const { call, pool } = await fixture(t);
+  const alice = await token(); const bob = await token("auth0|bob");
+  const tool = (name, args, bearer = alice) => call("/mcp", { bearer, method: "POST",
+    headers: { Accept: "application/json, text/event-stream" },
+    body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } } });
+  const updated = await tool("upsert_productivity", { id: definitions[0].id, output: 45, userId: "forged-bob" });
+  assert.equal(updated.status, 200, updated.raw);
+  assert.equal(updated.body.result.isError, undefined);
+  assert.equal(updated.body.result.structuredContent.saved.output, 45);
+  assert.equal(updated.body.result.structuredContent.saved.name, definitions[0].name);
+  assert.equal(updated.body.result.structuredContent.saved.workContent, definitions[0].workContent);
+  assert.equal(updated.body.result.structuredContent.account.productivityScope, "personal");
+  assert.equal((await call("/api/productivity", { bearer: alice })).body.items.find((entry) => entry.id === definitions[0].id).output, 45);
+  assert.equal((await call("/api/productivity", { bearer: bob })).body.items.find((entry) => entry.id === definitions[0].id).output, 10);
+  const prepared = await tool("prepare_project_review", projectInput());
+  assert.equal(prepared.body.result.structuredContent.workItems[0].productivity.output, 45);
+  const bobId = principalFromClaims({ iss: config.issuer, sub: "auth0|bob" }, config).id;
+  assert.equal((await new PostgresPersonalProductivityStore(pool, bobId).find(definitions[0].id)).output, 10);
+  assert.equal((await pool.query("SELECT entry FROM public_productivity WHERE id=$1", [definitions[0].id])).rows[0].entry.output, 10);
 });
 
 test("complete reviewed workflow saves once, preserves construction order and isolates two users", async (t) => {
