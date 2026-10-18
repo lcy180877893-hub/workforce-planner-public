@@ -15,7 +15,8 @@ async function fixture(t) {
   // Every byte is synthetic. Never copy a real repository, environment or personal data.
   for (const name of RELEASE_FILES) await put(name, name.endsWith(".js") || name.endsWith(".mjs") ? "export {};\n" : "# synthetic release fixture\n");
   await put(".env.example", "# Blank placeholders only\nDATABASE_URL=\nSESSION_SECRET=\n");
-  await put("package.json", JSON.stringify({ name: "release-fixture", version: "0.0.0-test", type: "module",
+  await put("LICENSE", 'MIT License\nCopyright (c) 2026 Synthetic Fixture\nPermission is hereby granted, free of charge\nTHE SOFTWARE IS PROVIDED "AS IS"\n');
+  await put("package.json", JSON.stringify({ name: "release-fixture", version: "0.0.0-test", type: "module", license: "MIT",
     scripts: { start: "node src/public-server.js", migrate: "node src/migrate-public.js", preflight: "node scripts/release-preflight.mjs" },
     dependencies: { express: "5.3.0" },
   }));
@@ -42,6 +43,12 @@ test("dependency and git directories are never traversed, read or included in ha
   await f.put(".git/config", "synthetic-unread\n");
   const manifest = await inspectRelease(f.root);
   assert.ok(!manifest.files.some((file) => /(?:node_modules|\.git\/)/u.test(file.path)));
+});
+
+test("MIT license metadata and text are required in the open-source release", async (t) => {
+  const f = await fixture(t);
+  await f.put("LICENSE", "# Missing license text\n");
+  await assert.rejects(inspectRelease(f.root), /LICENSE 缺少 MIT/u);
 });
 
 test("unexpected files, real environment names and private directories fail before reading contents", async (t) => {
@@ -81,7 +88,7 @@ test("environment example contains only blank values, not real or plausible samp
 
 test("public start is fixed and neither script nor runtime can activate legacy or model fallbacks", async (t) => {
   const cases = [
-    ["package.json", JSON.stringify({ scripts: { start: "node src/server.js", migrate: "node src/migrate-public.js" } }), /start 必须固定/u],
+    ["package.json", JSON.stringify({ license: "MIT", scripts: { start: "node src/server.js", migrate: "node src/migrate-public.js" } }), /start 必须固定/u],
     ["src/public-server.js", "import './plan-history-store.js';\n", /导入越界或未审核/u],
     ["src/public-server.js", "import '../unreviewed.js';\n", /导入越界或未审核/u],
     ["src/public-server.js", "const key = process.env['OPENAI_' + 'API_KEY']; import('arbitrary-package');\n", /动态导入/u],
