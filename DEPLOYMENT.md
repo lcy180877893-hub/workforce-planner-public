@@ -10,7 +10,7 @@
 
 新建单独的 Free 项目，不连接或导入原私有测试数据；选择与 Render 尽量接近的区域。在项目 Connect 面板取 PostgreSQL 连接串，保存为 Render 的 `DATABASE_URL`。可使用带 pooler 的连接地址；应用连接池最多 5 条连接，事务使用同一个客户端和事务级锁。连接的 TLS 验证不可关闭。
 
-应用的 `pnpm migrate` 创建三张独立表：公共工效、个人历史、每日保存计数。迁移幂等且只插入缺失的默认工效；没有 HTTP 迁移入口，也不会导入私人文件。生产数据库测试前备份；不通过删库、清表解决迁移问题。[Neon Node 指南](https://neon.com/docs/guides/node)
+应用的 `pnpm migrate` 创建四张独立表：公共工效、个人工效覆盖、个人历史、每日保存计数。迁移只使用 `CREATE IF NOT EXISTS` 扩展结构，种子只插入缺失的公共默认工效（含用户授权的 111 条待补目录）；没有 HTTP 迁移入口，不清表、不改历史，也不会导入私人文件。生产数据库测试前备份；不通过删库、清表解决迁移问题。[Neon Node 指南](https://neon.com/docs/guides/node)
 
 ## 3. Auth0 网站登录
 
@@ -30,7 +30,7 @@
 
 ChatGPT 客户端注册按最终插件创建界面的真实要求选择：支持预注册客户端时，新建单独的 OAuth 客户端，只登记界面显示的精确回调地址，并在安全配置区填写其 Client ID/Secret；若该发布路径要求动态注册，按 Auth0 MCP 文档配置 DCR 或受支持的 CIMD，并核对连接允许第三方应用使用、用户委托访问和授权 scopes。启用开放 DCR 会扩大客户端注册范围，不在本地改造时自动开启。两种方式不能以未经验证的示例地址代替实际回调。
 
-资源地址为 `PUBLIC_ORIGIN/mcp`，公开元数据为 `PUBLIC_ORIGIN/.well-known/oauth-protected-resource`。匿名可发现工具描述，但所有工效、个人资料、历史和写操作都要求授权；scope 不足返回 OAuth 升级提示，非管理员不能用重新授权获得工效维护权。[OpenAI 插件认证](https://developers.openai.com/plugins/build/auth)
+资源地址为 `PUBLIC_ORIGIN/mcp`，公开元数据为 `PUBLIC_ORIGIN/.well-known/oauth-protected-resource`。匿名可发现工具描述，但所有工效、个人资料、历史和写操作都要求授权；scope 不足返回 OAuth 升级提示。持有 write scope 的用户只能维护本账号个人工效版本，不能修改共享默认库或其他账号。[OpenAI 插件认证](https://developers.openai.com/plugins/build/auth)
 
 管理员由 Render 中的 `ADMIN_SUBJECTS` 指定已验证 Auth0 用户的原始 sub，可逗号分隔；不填则无人可修改公共库。不得用邮箱或前端勾选框授权。两种客户端都必须映射到同一 Auth0 用户，才能在网页和 ChatGPT 看到同一份个人历史；使用两个不同登录身份的记录不会自动合并。
 
@@ -47,7 +47,7 @@ ChatGPT 客户端注册按最终插件创建界面的真实要求选择：支持
 1. Render 部署状态真实为 live，HTTPS `/health` 版本正确，`/ready` 成功；无数据库或密钥泄露日志。
 2. 两个不同个人账号分别完成真实网站登录和 ChatGPT OAuth，未登录不能读库/历史。
 3. 账号 A 生成一条合成方案，B 无法列出、读取或删除它；伪造编号和角色不提升权限。
-4. 公开工效对 A/B 均可读，只有管理员可维护；测试后保留测试记录还是删自己的记录需明确决定，不触碰任何私有记录。
+4. 公共默认工效对 A/B 均可读；A 修改或隐藏工效不影响 B 或公共默认值，两账号测算各自使用个人版本。测试后保留测试记录还是删自己的记录需明确决定，不触碰任何私有记录。
 5. 同 requestId 重试只保存一条；资料变化使指纹失效；工效缺失时提示补充，不冒称完整方案。
 6. 当前 ChatGPT 完成 prepare→确认条件→generate 流程，四页切换、原面板结果回填、柱状图和横道图缩放都可用。网页复制请求到同一公开插件也能找回原结果；不调用模型 API。
 7. 注销/切换账号不闪现上一账号方案、比例或草稿；分别验收网页及内嵌宿主状态。

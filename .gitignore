@@ -39,6 +39,7 @@
 !/src/migrate-public.js
 !/src/planner.js
 !/src/productivity-data.js
+!/src/productivity-expansion.js
 !/src/productivity-hierarchy.js
 !/src/productivity-store.js
 !/src/project-review.js
