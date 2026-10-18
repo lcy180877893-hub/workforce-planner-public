@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 // A versioned URI prevents ChatGPT from retaining an incompatible old bundle.
 export const WORKFORCE_UI_URI = "ui://workforce/planner-v0.18.0.html";
-export const CLOUD_WORKFORCE_UI_URI = "ui://workforce/public-planner-v0.19.0-rc.1.html";
+export const CLOUD_WORKFORCE_UI_URI = "ui://workforce/public-planner-v0.19.1-rc.1.html";
 export const WORKFORCE_UI_MIME = "text/html;profile=mcp-app";
 
 export const uiResourceMetadata = Object.freeze({

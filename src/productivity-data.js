@@ -1,4 +1,5 @@
 import { hierarchyForName } from "./productivity-hierarchy.js";
+import { productivityExpansion } from "./productivity-expansion.js";
 
 const SOURCE = "跨项目人员工效推荐表1.1.xlsx（普适推荐）";
 
@@ -114,3 +115,6 @@ productivityData.push({
   status: "unavailable",
   notes: "补齐单位、班组配置及推荐工效后方可改为可用。",
 });
+
+// Only the 111 explicitly approved directory rows; do not load private stores.
+productivityData.push(...productivityExpansion);

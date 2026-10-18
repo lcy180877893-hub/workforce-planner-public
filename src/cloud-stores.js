@@ -10,6 +10,7 @@ export const PUBLIC_STORE_LIMITS = Object.freeze({
   savesPerUserPerDay: 20,
   productivityBytes: 32 * 1024,
   productivityEntries: 500,
+  personalProductivityTotal: 5000,
 });
 
 function failure(message, statusCode) {
@@ -227,6 +228,51 @@ function normalizedEntry(entry) {
   };
 }
 
+function normalizedPersonalEntry(entry) {
+  const normalized = normalizedEntry(entry);
+  // A personal user may deliberately clear work content while retaining notes.
+  // The legacy shared store continues to use its original notes fallback.
+  if (typeof entry.workContent === "string") normalized.workContent = entry.workContent;
+  return normalized;
+}
+
+function preparedEntry(input, existing, { personal = false } = {}) {
+  const id = normalizedId(input.id || `${input.division ?? "其他工程"}-${input.subitem ?? "未分类分项"}-${input.name ?? ""}`);
+  requiredText(id, "工效编码");
+  const mode = ["equipment_hour", "role_productivity"].includes(input.mode) ? input.mode : "crew_day";
+  const productivityUnit = String(input.productivityUnit ?? "").trim();
+  const unit = String(input.unit ?? productivityUnit.split("/")[0] ?? "").trim();
+  const division = String(input.division ?? existing?.division ?? "其他工程").trim() || "其他工程";
+  const subitem = String(input.subitem ?? existing?.subitem ?? "未分类分项").trim() || "未分类分项";
+  // Explicit fields only: owner, permissions and provenance from request JSON
+  // must never select an account or masquerade as trusted server metadata.
+  const entry = (personal ? normalizedPersonalEntry : normalizedEntry)({
+    id, division, subitem,
+    hierarchyOrder: existing?.division === division && existing?.subitem === subitem ? existing.hierarchyOrder : undefined,
+    category: String(input.category ?? "待分类").trim(),
+    name: String(input.name ?? "").trim(), unit, mode,
+    output: mode === "role_productivity" ? undefined
+      : input.output === null || input.output === undefined || input.output === "" ? null : Number(input.output),
+    crew: roles(input.crew), roleProductivity: roles(input.roleProductivity),
+    crewText: String(input.crewText ?? "").trim(), productivityUnit,
+    workContent: String(input.workContent ?? "").trim(),
+    equipment: Array.isArray(input.equipment) ? input.equipment.map(String).map((item) => item.trim()).filter(Boolean) : [],
+    source: String(input.source ?? "后续补充").trim(), sourcePriority: 3,
+    status: ["confirmed", "needs_validation", "unavailable"].includes(input.status) ? input.status : "confirmed",
+    notes: String(input.notes ?? "").trim(), updatedAt: new Date().toISOString(),
+  });
+  validateEntry(entry);
+  return entry;
+}
+
+function filteredEntries(entries, { search = "", status = "" } = {}) {
+  const needle = String(search).trim().toLowerCase();
+  return entries.filter((entry) => !status || entry.status === status)
+    .filter((entry) => !needle || [entry.id, entry.name, entry.division, entry.subitem,
+      entry.category, entry.unit, entry.crewText, entry.productivityUnit, entry.workContent,
+      ...Object.keys(entry.roleProductivity)].join(" ").toLowerCase().includes(needle));
+}
+
 export class PostgresProductivityStore {
   #pool;
   #isAdmin;
@@ -264,29 +310,8 @@ export class PostgresProductivityStore {
   async upsert(input) {
     this.#requireAdmin();
     const id = normalizedId(input.id || `${input.division ?? "其他工程"}-${input.subitem ?? "未分类分项"}-${input.name ?? ""}`);
-    requiredText(id, "工效编码");
     const existing = await this.find(id);
-    const mode = ["equipment_hour", "role_productivity"].includes(input.mode) ? input.mode : "crew_day";
-    const productivityUnit = String(input.productivityUnit ?? "").trim();
-    const unit = String(input.unit ?? productivityUnit.split("/")[0] ?? "").trim();
-    const division = String(input.division ?? existing?.division ?? "其他工程").trim() || "其他工程";
-    const subitem = String(input.subitem ?? existing?.subitem ?? "未分类分项").trim() || "未分类分项";
-    const entry = normalizedEntry({
-      id, division, subitem,
-      hierarchyOrder: existing?.division === division && existing?.subitem === subitem ? existing.hierarchyOrder : undefined,
-      category: String(input.category ?? "待分类").trim(),
-      name: String(input.name ?? "").trim(), unit, mode,
-      output: mode === "role_productivity" ? undefined
-        : input.output === null || input.output === undefined || input.output === "" ? null : Number(input.output),
-      crew: roles(input.crew), roleProductivity: roles(input.roleProductivity),
-      crewText: String(input.crewText ?? "").trim(), productivityUnit,
-      workContent: String(input.workContent ?? "").trim(),
-      equipment: Array.isArray(input.equipment) ? input.equipment.map(String).map((item) => item.trim()).filter(Boolean) : [],
-      source: String(input.source ?? "后续补充").trim(), sourcePriority: 3,
-      status: ["confirmed", "needs_validation", "unavailable"].includes(input.status) ? input.status : "confirmed",
-      notes: String(input.notes ?? "").trim(), updatedAt: new Date().toISOString(),
-    });
-    validateEntry(entry);
+    const entry = preparedEntry(input, existing);
     const serialized = jsonPayload(entry, PUBLIC_STORE_LIMITS.productivityBytes, "工效条目");
     return transaction(this.#pool, async (client) => {
       const { rows } = await client.query("SELECT count(*)::integer AS total FROM public_productivity");
@@ -312,6 +337,112 @@ export class PostgresProductivityStore {
     );
     if (!rows[0]) throw failure("未找到要删除的工效条目", 404);
     return { id: normalized, name: rows[0].entry.name };
+  }
+}
+
+export class PostgresPersonalProductivityStore {
+  #pool;
+  #userId;
+
+  // Identity is supplied only after issuer/sub verification, never by a tool
+  // argument, URL, JSON field, public property or administrator role.
+  constructor(pool, verifiedUserId) {
+    this.#pool = pool;
+    this.#userId = requiredText(verifiedUserId, "已验证用户标识");
+  }
+
+  #rejectOwnership(input) {
+    if (["userId", "user_id", "ownerId", "owner_id", "owner"].some((key) => Object.hasOwn(input, key))) {
+      throw failure("个人工效归属只能由当前已验证登录账号确定，不能在请求中指定", 400);
+    }
+  }
+
+  async #checkOverlayQuota(client, id) {
+    const { rows } = await client.query(
+      `SELECT count(*)::integer AS global_total,
+       count(*) FILTER (WHERE user_id = $1)::integer AS total,
+       count(*) FILTER (WHERE user_id = $1 AND id = $2)::integer AS existing
+       FROM public_personal_productivity`, [this.#userId, id],
+    );
+    if (!rows[0].existing && rows[0].total >= PUBLIC_STORE_LIMITS.productivityEntries) {
+      throw failure("公开免费版个人工效修改记录已达到 500 条上限", 429);
+    }
+    if (!rows[0].existing && rows[0].global_total >= PUBLIC_STORE_LIMITS.personalProductivityTotal) {
+      throw failure("公开免费版个人工效存储已满，请联系管理员；未删除任何工效", 429);
+    }
+  }
+
+  async #entries(client = this.#pool) {
+    const { rows } = await client.query(
+      `SELECT entry, catalog_scope FROM (
+       SELECT s.id, s.entry, s.created_at, 'shared' AS catalog_scope FROM public_productivity s
+       WHERE s.deleted_at IS NULL AND NOT EXISTS (
+         SELECT 1 FROM public_personal_productivity p WHERE p.user_id = $1 AND p.id = s.id)
+       UNION ALL
+       SELECT p.id, p.entry, p.created_at, 'personal' AS catalog_scope FROM public_personal_productivity p
+       WHERE p.user_id = $1 AND p.deleted_at IS NULL
+       ) effective ORDER BY created_at, id`, [this.#userId],
+    );
+    return rows.map((row) => ({ ...(row.catalog_scope === "personal" ? normalizedPersonalEntry(row.entry) : normalizedEntry(row.entry)), catalogScope: row.catalog_scope,
+      hasPersonalOverride: row.catalog_scope === "personal" }));
+  }
+
+  async list(filters = {}) {
+    return filteredEntries(await this.#entries(), filters);
+  }
+
+  async find(id) {
+    const { rows } = await this.#pool.query(
+      `SELECT s.entry, 'shared' AS catalog_scope FROM public_productivity s
+       WHERE s.id = $2 AND s.deleted_at IS NULL AND NOT EXISTS (
+         SELECT 1 FROM public_personal_productivity p WHERE p.user_id = $1 AND p.id = s.id)
+       UNION ALL
+       SELECT p.entry, 'personal' AS catalog_scope FROM public_personal_productivity p
+       WHERE p.user_id = $1 AND p.id = $2 AND p.deleted_at IS NULL`, [this.#userId, String(id)],
+    );
+    return rows[0] ? { ...(rows[0].catalog_scope === "personal" ? normalizedPersonalEntry(rows[0].entry) : normalizedEntry(rows[0].entry)), catalogScope: rows[0].catalog_scope,
+      hasPersonalOverride: rows[0].catalog_scope === "personal" } : null;
+  }
+
+  async upsert(input) {
+    this.#rejectOwnership(input);
+    const id = normalizedId(input.id || `${input.division ?? "其他工程"}-${input.subitem ?? "未分类分项"}-${input.name ?? ""}`);
+    // Missing/undefined patch fields preserve the current version. Deliberately
+    // supplied empty text/arrays are still meaningful and may clear a field.
+    const patch = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+    return transaction(this.#pool, async (client) => {
+      await this.#checkOverlayQuota(client, id);
+      const effective = await this.#entries(client);
+      const existing = effective.find((item) => item.id === id);
+      const entry = preparedEntry({ ...existing, ...patch }, existing, { personal: true });
+      const serialized = jsonPayload(entry, PUBLIC_STORE_LIMITS.productivityBytes, "个人工效条目");
+      if (!effective.some((item) => item.id === id) && effective.length >= PUBLIC_STORE_LIMITS.productivityEntries) {
+        throw failure("公开免费版个人工效库已达到 500 条上限", 429);
+      }
+      await client.query(
+        `INSERT INTO public_personal_productivity (user_id, id, entry) VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (user_id, id) DO UPDATE SET entry = EXCLUDED.entry,
+           deleted_at = NULL, updated_at = CURRENT_TIMESTAMP`, [this.#userId, id, serialized],
+      );
+      return { ...entry, catalogScope: "personal", hasPersonalOverride: true };
+    }, 710083480);
+  }
+
+  async delete(id) {
+    const normalized = normalizedId(id);
+    return transaction(this.#pool, async (client) => {
+      const effective = (await this.#entries(client)).find((item) => item.id === normalized);
+      if (!effective) throw failure("未找到要从个人工效库隐藏的条目", 404);
+      await this.#checkOverlayQuota(client, normalized);
+      const { catalogScope: _scope, hasPersonalOverride: _override, ...entry } = effective;
+      await client.query(
+        `INSERT INTO public_personal_productivity (user_id, id, entry, deleted_at)
+         VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+         ON CONFLICT (user_id, id) DO UPDATE SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
+        [this.#userId, normalized, jsonPayload(entry, PUBLIC_STORE_LIMITS.productivityBytes, "个人工效条目")],
+      );
+      return { id: normalized, name: entry.name, catalogScope: "personal", hasPersonalOverride: true };
+    }, 710083480);
   }
 }
 

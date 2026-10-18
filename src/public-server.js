@@ -8,12 +8,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createMcpServer, cloudReviewInputSchema, cloudPlanInputSchema, requestHash, validatePublicInput } from "./mcp.js";
 import { buildProjectReviewContext } from "./project-review.js";
 import { generateWorkforcePlan } from "./planner.js";
-import { PostgresHistoryStore, PostgresProductivityStore } from "./cloud-stores.js";
+import { PostgresHistoryStore, PostgresProductivityStore, PostgresPersonalProductivityStore } from "./cloud-stores.js";
 import { createPublicAuth, loadPublicConfig, requirePrincipal, protectedResourceMetadata, oauthChallenge } from "./public-auth.js";
 
-export const PUBLIC_VERSION = "0.19.0-rc.1";
+export const PUBLIC_VERSION = "0.19.1-rc.1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
-const account = (principal) => ({ id: principal.id, displayName: principal.displayName, isAdmin: principal.isAdmin });
+const account = (principal) => ({ id: principal.id, displayName: principal.displayName, isAdmin: principal.isAdmin,
+  canEditProductivity: true, productivityScope: "personal" });
 const badRequest = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
 // Use the system CA store and hostname verification. Never accept an insecure
@@ -70,7 +71,8 @@ export function createPublicApp({ config, pool, auth = createPublicAuth(config) 
       }
       const principal = await auth.resolvePrincipal(req, { allowSession: false });
       mcpLimit(principal?.id || `anonymous:${req.ip}`);
-      const catalog = new PostgresProductivityStore(pool, { isAdmin: principal?.isAdmin === true });
+      const catalog = principal ? new PostgresPersonalProductivityStore(pool, principal.id)
+        : new PostgresProductivityStore(pool);
       const history = principal ? new PostgresHistoryStore(pool, principal.id) : null;
       const server = createMcpServer(catalog, history, { cloudMode: true, principal, authConfig: config });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
@@ -106,7 +108,7 @@ export function createPublicApp({ config, pool, auth = createPublicAuth(config) 
     } catch (error) { next(error); }
   }, auth.csrfGuard);
   const stores = (req) => ({
-    catalog: new PostgresProductivityStore(pool, { isAdmin: req.publicPrincipal.isAdmin === true }),
+    catalog: new PostgresPersonalProductivityStore(pool, req.publicPrincipal.id),
     history: new PostgresHistoryStore(pool, req.publicPrincipal.id),
   });
   app.get("/api/gpt-status", (_req, res) => res.json({ configured: true,
@@ -115,12 +117,11 @@ export function createPublicApp({ config, pool, auth = createPublicAuth(config) 
     try { res.json({ items: await stores(req).catalog.list({ search: String(req.query.search || "").slice(0, 200), status: String(req.query.status || "") }) }); }
     catch (error) { next(error); }
   });
-  const admin = (req, _res, next) => req.publicPrincipal.isAdmin ? next() : next(badRequest("只有管理员可以维护公共工效库", 403));
-  for (const method of ["post", "put"]) app[method](method === "post" ? "/api/productivity" : "/api/productivity/:id", admin, async (req, res, next) => {
+  for (const method of ["post", "put"]) app[method](method === "post" ? "/api/productivity" : "/api/productivity/:id", async (req, res, next) => {
     try { res.json({ saved: await stores(req).catalog.upsert({ ...req.body, ...(req.params.id ? { id: req.params.id } : {}) }) }); }
     catch (error) { next(error); }
   });
-  app.delete("/api/productivity/:id", admin, async (req, res, next) => {
+  app.delete("/api/productivity/:id", async (req, res, next) => {
     try { res.json({ deleted: await stores(req).catalog.delete(req.params.id) }); } catch (error) { next(error); }
   });
   app.get("/api/workforce-history", async (req, res, next) => {
