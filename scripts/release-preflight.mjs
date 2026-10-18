@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 // Deliberately exact: adding a release file requires review here AND in .gitignore.
 // This is a publication safeguard, not a replacement for human secret/security review.
 export const RELEASE_FILES = Object.freeze([
-  ".gitignore", ".env.example", "README.md", "DEPLOYMENT.md", "RELEASE-STATUS.md",
+  ".gitignore", ".env.example", "README.md", "LICENSE", "DEPLOYMENT.md", "RELEASE-STATUS.md",
   "package.json", "pnpm-lock.yaml", "render.yaml", "release-manifest.json",
   "scripts/release-preflight.mjs", "sql/001-public.sql",
   "src/chatgpt-ui.js", "src/cloud-stores.js", "src/mcp.js", "src/migrate-public.js",
@@ -27,7 +27,7 @@ export const RELEASE_FILES = Object.freeze([
 ]);
 
 const requiredFiles = [
-  ".gitignore", ".env.example", "README.md", "DEPLOYMENT.md", "package.json", "pnpm-lock.yaml",
+  ".gitignore", ".env.example", "README.md", "LICENSE", "DEPLOYMENT.md", "package.json", "pnpm-lock.yaml",
   "render.yaml", "scripts/release-preflight.mjs", "sql/001-public.sql",
   "src/public-server.js", "src/public-auth.js", "src/cloud-stores.js", "src/migrate-public.js",
   "src/mcp.js", "src/chatgpt-ui.js", "src/planner.js", "src/productivity-store.js",
@@ -133,6 +133,10 @@ export async function inspectRelease(directory) {
   for (const name of requiredFiles) if (!contents.has(name)) throw issue(`缺少发布所需文件 ${name}`);
   let pkg;
   try { pkg = JSON.parse(contents.get("package.json").text); } catch { throw issue("package.json 不是有效 JSON"); }
+  if (pkg.license !== "MIT") throw issue("开源包的 license 必须为 MIT");
+  const licenseText = contents.get("LICENSE").text;
+  if (!/^MIT License\r?\n/u.test(licenseText) || !licenseText.includes("Permission is hereby granted, free of charge")
+    || !licenseText.includes('THE SOFTWARE IS PROVIDED "AS IS"')) throw issue("LICENSE 缺少 MIT 授权文本");
   if (pkg.scripts?.start !== "node src/public-server.js") throw issue("start 必须固定为 node src/public-server.js，禁止私有/API 回退入口");
   if (pkg.scripts?.migrate !== "node src/migrate-public.js") throw issue("migrate 必须固定为 node src/migrate-public.js");
   if (Object.values(pkg.scripts || {}).some((command) => /(?:dotenv|--env-file|src\/(?:server|ai-review|planning-service)\.js)/u.test(command))) {
