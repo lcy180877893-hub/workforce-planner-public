@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="沙特工程项目工程量、工期与劳动力方案测算，适用于多种项目类型" />
+    <title>沙特项目劳动力测算</title>
+    <link rel="stylesheet" href="/styles.css?v=0.18.0" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">SAUDI PROJECT WORKFORCE PLANNER · MVP</p>
+        <h1>从工程量到劳动力方案</h1>
+        <p class="lede">按标准8小时工效和实际施工顺序测算。工期足够采用顺序施工；不足时比较早晚班、多班组白班和单班组白班多工序搭接；单班组搭接仍不足时，再比较多班组白班多工序搭接。缺失工效列入待补充清单。</p>
+      </div>
+    </header>
+
+    <main>
+      <nav class="tabs" aria-label="功能切换">
+        <button class="tab is-active" data-tab="planner">劳动力测算</button>
+        <button class="tab" data-tab="ratios">比例设置</button>
+        <button class="tab" data-tab="history">测算历史</button>
+        <button class="tab" data-tab="library">工效库</button>
+      </nav>
+
+      <section id="planner" class="tab-panel is-active">
+        <form id="plan-form">
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <span class="step">01</span>
+                <h2>项目条件</h2>
+              </div>
+              <p>先核对顺序施工工期，不足时比较增班、增班组或有条件的多工序搭接。</p>
+            </div>
+            <label class="project-context-field">项目说明（选填）
+              <textarea name="context" maxlength="5000" rows="3" placeholder="例如：酒店A、B两栋，各自独立工作面；基础、主体采用现浇；两栋共用一台吊车。请说明会影响施工顺序的条件。"></textarea>
+            </label>
+            <p id="gpt-status" class="hint" role="status">正在检查智能测算连接…</p>
+            <div class="form-grid project-grid date-grid">
+              <label>
+                项目开工日期
+                <input name="startDate" type="date" value="2026-10-01" required />
+              </label>
+              <label>
+                项目完工日期
+                <input name="endDate" type="date" value="2027-05-31" required />
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <span class="step">02</span>
+                <h2>工程量</h2>
+              </div>
+            </div>
+            <p class="source-rule">按分部 → 分项 → 工种/工序录入，同名分部可重复添加。备注用于区分楼栋、楼层或区域；同一施工部位的各分部请填写相同备注。测算时自动识别施工先后顺序，并在结果和横道图中显示。</p>
+            <div id="division-list" class="division-list"></div>
+            <button class="button secondary add-division" type="button" id="add-division">＋ 增加分部</button>
+            <button class="button primary wide" type="submit">生成劳动力方案</button>
+            <p id="plan-message" class="hint" role="status" aria-live="polite"></p>
+          </section>
+        </form>
+
+        <section id="results" class="results" hidden>
+          <div class="section-heading result-heading">
+            <div>
+              <span class="step">03</span>
+              <h2>测算结果</h2>
+            </div>
+            <button class="button secondary" type="button" id="download-json">导出 JSON</button>
+          </div>
+          <p id="result-history-note" class="source-rule"></p>
+          <div id="result-content"></div>
+        </section>
+      </section>
+
+      <section id="ratios" class="tab-panel">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <span class="step">%</span>
+              <h2>比例设置</h2>
+            </div>
+          </div>
+          <div class="rule-card settings-rule-card" aria-live="polite">
+            <span>项目施工时间在项目条件中填写；季节和斋月规则在此设置</span>
+            <strong id="rule-period-summary">10–5月冬季 · 6–9月夏季 · 斋月优先</strong>
+            <small id="rule-factor-summary">冬季100% · 夏季70% · 斋月50%，不叠乘</small>
+          </div>
+          <p class="source-rule">设置冬季、夏季和斋月的工效比例；斋月比例优先，不与季节比例叠乘。设置自动保存在当前浏览器，并用于之后生成的方案。</p>
+          <form id="ratio-form" class="ratio-grid">
+            <label>冬季工效比例（%）<input id="winter-percent" type="number" min="0.01" max="200" step="any" value="100" required /></label>
+            <label>夏季工效比例（%）<input id="summer-percent" type="number" min="0.01" max="200" step="any" value="70" required /></label>
+            <label>斋月工效比例（%）<input id="ramadan-percent" type="number" min="0.01" max="200" step="any" value="50" required /></label>
+          </form>
+          <div class="form-actions ratio-actions">
+            <button class="button secondary" type="button" id="reset-ratios">恢复默认比例</button>
+            <p id="ratio-status" class="hint" role="status"></p>
+          </div>
+          <div class="settings-divider"></div>
+          <h3 class="settings-subheading">冬季、夏季、斋月时间</h3>
+          <p class="source-rule">冬夏季起止日按每年重复设置，必须互不重叠并覆盖全年；斋月可自动识别，也可填写项目实际起止日期。</p>
+          <form id="calendar-form" class="calendar-period-grid">
+            <div class="calendar-period-card">
+              <h4>冬季</h4>
+              <div class="calendar-fields">
+                <label>每年开始（月-日）<input id="winter-start" value="10-01" inputmode="numeric" pattern="[0-9]{2}-[0-9]{2}" required /></label>
+                <label>每年结束（月-日）<input id="winter-end" value="05-31" inputmode="numeric" pattern="[0-9]{2}-[0-9]{2}" required /></label>
+              </div>
+            </div>
+            <div class="calendar-period-card">
+              <h4>夏季</h4>
+              <div class="calendar-fields">
+                <label>每年开始（月-日）<input id="summer-start" value="06-01" inputmode="numeric" pattern="[0-9]{2}-[0-9]{2}" required /></label>
+                <label>每年结束（月-日）<input id="summer-end" value="09-30" inputmode="numeric" pattern="[0-9]{2}-[0-9]{2}" required /></label>
+              </div>
+            </div>
+            <div class="calendar-period-card">
+              <h4>斋月</h4>
+              <label>日期方式
+                <select id="ramadan-mode">
+                  <option value="auto">按沙特乌姆古拉历自动识别</option>
+                  <option value="custom">手动填写起止日期</option>
+                </select>
+              </label>
+              <div id="ramadan-custom-dates" hidden>
+                <p class="source-rule">跨多个年份的项目，可增加多段斋月日期。</p>
+                <div id="ramadan-ranges"></div>
+                <button class="button secondary" type="button" id="add-ramadan-range">＋ 增加一段斋月日期</button>
+              </div>
+            </div>
+          </form>
+          <div class="form-actions ratio-actions">
+            <button class="button secondary" type="button" id="reset-calendar">恢复默认时间</button>
+            <p id="calendar-status" class="hint" role="status"></p>
+          </div>
+        </section>
+      </section>
+
+      <section id="history" class="tab-panel">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <span class="step">H</span>
+              <h2>测算历史</h2>
+            </div>
+            <input id="history-search" class="search" placeholder="搜索日期、分项或工种" aria-label="搜索测算历史" />
+          </div>
+          <p class="source-rule">每次成功测算后自动保存，可查看当时的劳动力配置和分项明细。</p>
+          <p id="history-message" class="hint" role="status"></p>
+          <div class="work-table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr><th>测算时间</th><th>项目施工时间</th><th>工程项数</th><th>劳动力汇总</th><th>操作</th></tr>
+              </thead>
+              <tbody id="history-rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="history-detail" class="results" hidden>
+          <div class="section-heading result-heading">
+            <div>
+              <span class="step">D</span>
+              <h2>历史劳动力方案</h2>
+            </div>
+            <button class="button secondary" type="button" id="close-history-detail">收起详情</button>
+          </div>
+          <p id="history-detail-meta" class="source-rule"></p>
+          <div id="history-detail-content"></div>
+        </section>
+      </section>
+
+      <section id="library" class="tab-panel">
+        <div class="library-layout">
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <span class="step">A</span>
+                <h2>工效库</h2>
+              </div>
+            </div>
+            <p class="source-rule">按分部工程、分项工程、具体工种/工序逐级筛选。默认库保留原表46条普适推荐工效，另列1条“管底基础”不可用占位项；补齐工效后方可启用。</p>
+            <div class="library-filters">
+              <label>分部工程<select id="library-division-filter"><option value="">全部分部</option></select></label>
+              <label>分项工程<select id="library-subitem-filter" disabled><option value="">全部分项</option></select></label>
+              <label>工种 / 工序<select id="library-activity-filter" disabled><option value="">全部工种 / 工序</option></select></label>
+              <label>关键词<input id="library-search" class="search" placeholder="搜索工种、班组或工作内容" /></label>
+              <button class="button secondary" type="button" id="clear-library-filters">清除筛选</button>
+            </div>
+            <p id="library-count" class="hint" role="status"></p>
+            <div class="library-table-wrap">
+              <table class="library-table">
+                <thead>
+                  <tr><th>分部工程</th><th>分项工程</th><th>工种 / 工序</th><th>工种类型</th><th>班组配置</th><th>推荐工效</th><th>单位</th><th>工作内容</th><th>状态</th><th>操作</th></tr>
+                </thead>
+                <tbody id="library-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="productivity-maintenance" class="panel sticky-card">
+            <div class="section-heading compact">
+              <div>
+                <span class="step">B</span>
+                <h2 id="productivity-form-title">新增工效</h2>
+              </div>
+            </div>
+            <form id="productivity-form" class="stack-form">
+              <input name="id" type="hidden" />
+              <div class="two-col">
+                <label>① 分部工程
+                  <select id="form-division" required><option value="" disabled>请选择分部工程</option></select>
+                  <input id="form-new-division" placeholder="填写新分部工程名称" hidden />
+                </label>
+                <label>② 分项工程
+                  <select id="form-subitem" required disabled><option value="" disabled>请先选择分部工程</option></select>
+                  <input id="form-new-subitem" placeholder="填写新分项工程名称" hidden />
+                </label>
+              </div>
+              <label>③ 工种 / 工序<input name="name" placeholder="如：钢筋绑扎/安装" required /></label>
+              <label>工种类型<input name="category" placeholder="如：钢筋工" required /></label>
+              <label>
+                班组配置
+                <input name="crewText" placeholder="中籍1 + 外籍技工4 + 杂工5" required />
+                <small>支持“中籍1 + 外籍技工4 + 杂工5”或“中籍:1, 外籍技工:4, 杂工:5”。</small>
+              </label>
+              <div class="two-col">
+                <label>推荐工效<input name="output" type="number" min="0.001" step="any" required /></label>
+                <label>单位<input name="productivityUnit" placeholder="如：t/班组·8h" required /></label>
+              </div>
+              <label>工作内容<textarea name="workContent" rows="4" placeholder="填写本工效包含的主要工作"></textarea></label>
+              <label>
+                状态
+                <select name="status">
+                  <option value="confirmed">可用</option>
+                  <option value="needs_validation">待核验</option>
+                  <option value="unavailable">不可用</option>
+                </select>
+                <small>不可用条目可暂不填班组、工效和单位；改为可用前必须补齐。</small>
+              </label>
+              <div class="form-actions">
+                <button id="save-productivity" class="button primary" type="submit">新增工效</button>
+                <button id="cancel-edit" class="button secondary" type="button" hidden>取消修改</button>
+              </div>
+              <p id="save-message" class="hint"></p>
+            </form>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <template id="division-template">
+      <section class="division-block">
+        <div class="division-heading">
+          <span class="hierarchy-number division-sequence"></span>
+          <label>分部工程<select class="division-select" aria-label="分部工程" required></select></label>
+          <label class="division-remark-field">备注（施工部位）<input class="division-remark" aria-label="分部备注" maxlength="200" placeholder="例如：酒店A栋、B栋2层、室外东区" /></label>
+          <button class="button secondary add-subitem" type="button">＋ 增加分项</button>
+          <button class="text-button danger remove-division" type="button">删除分部</button>
+        </div>
+        <div class="subitem-list"></div>
+      </section>
+    </template>
+
+    <template id="subitem-template">
+      <section class="subitem-block">
+        <div class="subitem-heading">
+          <span class="hierarchy-number subitem-sequence"></span>
+          <label>分项工程<select class="subitem-select" aria-label="分项工程" required></select></label>
+          <button class="button secondary add-work-item" type="button">＋ 增加工种 / 工序</button>
+          <button class="text-button danger remove-subitem" type="button">删除分项</button>
+        </div>
+        <div class="work-table-wrap"><table class="work-table">
+          <thead><tr><th>序号</th><th>工种 / 工序</th><th>工程量</th><th>单位</th><th>操作</th></tr></thead>
+          <tbody class="work-rows"></tbody>
+        </table></div>
+      </section>
+    </template>
+
+    <template id="work-row-template">
+      <tr>
+        <td class="sequence-cell"><span class="work-sequence"></span></td>
+        <td>
+          <select class="activity-select" aria-label="工种或工序" required></select>
+          <input class="missing-name" placeholder="待补充工序名称" hidden />
+        </td>
+        <td><input class="quantity" type="number" min="0.001" step="any" required /></td>
+        <td><input class="unit" readonly /></td>
+        <td><button class="icon-button remove-row" type="button" aria-label="删除">×</button></td>
+      </tr>
+    </template>
+
+    <template id="ramadan-range-template">
+      <div class="ramadan-range">
+        <label>斋月开始日期<input class="ramadan-start" type="date" required /></label>
+        <label>斋月结束日期<input class="ramadan-end" type="date" required /></label>
+        <button class="text-button danger remove-ramadan-range" type="button">删除此段</button>
+      </div>
+    </template>
+
+    <script src="/public-mode.js?v=0.18.0"></script>
+    <script type="module" src="/app.js?v=0.18.0"></script>
+  </body>
+</html>
