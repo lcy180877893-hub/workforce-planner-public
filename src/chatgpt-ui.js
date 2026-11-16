@@ -5,6 +5,7 @@ import packageInfo from "../package.json" with { type: "json" };
 export const WORKFORCE_UI_URI = "ui://workforce/planner-v0.18.0.html";
 export const PUBLIC_VERSION = packageInfo.version;
 export const CLOUD_WORKFORCE_UI_URI = `ui://workforce/public-planner-v${PUBLIC_VERSION}.html`;
+export const LOCAL_WORKFORCE_UI_URI = `ui://workforce/local-planner-v${PUBLIC_VERSION}.html`;
 export const WORKFORCE_UI_MIME = "text/html;profile=mcp-app";
 
 export const uiResourceMetadata = Object.freeze({

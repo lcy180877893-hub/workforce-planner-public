@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 export const RELEASE_FILES = Object.freeze([
   ".gitignore", ".env.example", "README.md", "LICENSE", "DEPLOYMENT.md", "RELEASE-STATUS.md",
   "package.json", "pnpm-lock.yaml", "render.yaml", "release-manifest.json",
+  "打开本机工效库.cmd", "src/local-catalog-web.js", "src/local-productivity-store.js",
+  "test/local-catalog-web.test.js", "test/local-productivity.test.js",
   "scripts/release-preflight.mjs", "sql/001-public.sql",
   "src/chatgpt-ui.js", "src/cloud-stores.js", "src/guest-stdio.js", "src/mcp.js", "src/migrate-public.js",
   "src/planner.js", "src/productivity-data.js", "src/productivity-expansion.js",
@@ -29,6 +31,7 @@ export const RELEASE_FILES = Object.freeze([
 const requiredFiles = [
   ".gitignore", ".env.example", "README.md", "LICENSE", "DEPLOYMENT.md", "package.json", "pnpm-lock.yaml",
   "render.yaml", "scripts/release-preflight.mjs", "sql/001-public.sql",
+  "打开本机工效库.cmd", "src/guest-stdio.js", "src/local-catalog-web.js", "src/local-productivity-store.js",
   "src/public-server.js", "src/public-auth.js", "src/cloud-stores.js", "src/migrate-public.js",
   "src/mcp.js", "src/chatgpt-ui.js", "src/planner.js", "src/productivity-store.js",
   "src/productivity-data.js", "src/productivity-expansion.js", "src/productivity-hierarchy.js", "src/project-review.js",
@@ -44,6 +47,10 @@ const skippedRoots = new Set(["node_modules", ".git"]);
 const forbiddenNames = new Set(["data", "sources", "connection", "connections", "logs", "backups", ".aws", ".codex"]);
 const forbiddenRuntime = /(?:ai-review|planning-service|plan-history-store|public-productivity-store|(?:^|\/)server)\.js$/u;
 const safeBuiltins = new Set(["node:crypto", "node:fs/promises", "node:path", "node:url"]);
+const localBuiltins = new Map([
+  ["src/local-catalog-web.js", new Set(["node:child_process"])],
+  ["src/local-productivity-store.js", new Set(["node:sqlite", "node:fs", "node:os"])],
+]);
 const knownDependencies = new Set(["@modelcontextprotocol/sdk", "express", "express-openid-connect", "jose", "pg", "zod"]);
 const modelSignals = /\b(?:OPENAI_API_KEY|OPENAI_BASE_URL|OPENAI_MODEL|GPT_REVIEW_API_KEY|GPT_REVIEW_MODEL|GPT_REVIEW_BASE_URL)\b|api\.openai\.com|\/v1\/(?:responses|chat\/completions)|\.{1,2}\/\.env\b|\b(?:new\s+(?:ProductivityStore|PlanHistoryStore)|dotenv\b|loadEnvFile\s*\()/u;
 
@@ -160,14 +167,16 @@ export async function inspectRelease(directory) {
         if (target.startsWith("../") || !allowed.has(target)) throw issue(`${name} 导入越界或未审核文件`);
         auditRuntime(target);
       } else if (specifier.startsWith("node:")) {
-        if (!safeBuiltins.has(specifier)) throw issue(`${name} 使用未审核系统依赖`);
+        if (!safeBuiltins.has(specifier) && !localBuiltins.get(name)?.has(specifier)) throw issue(`${name} 使用未审核系统依赖`);
       } else {
         const dependency = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
         if (!knownDependencies.has(dependency) || !pkg.dependencies?.[dependency]) throw issue(`${name} 使用未审核外部依赖`);
       }
     }
   }
-  for (const name of ["src/public-server.js", "src/guest-stdio.js", "src/migrate-public.js", "public/app.js", "public/public-mode.js", "public/chatgpt-ui.js", "public/chatgpt-bridge.js"]) auditRuntime(name);
+  for (const name of ["src/public-server.js", "src/migrate-public.js", "public/app.js", "public/public-mode.js", "public/chatgpt-ui.js", "public/chatgpt-bridge.js"]) auditRuntime(name);
+  if (visited.has("src/guest-stdio.js") || [...localBuiltins.keys()].some((name) => visited.has(name))) throw issue("云端和公共网页入口不能导入本机工效库或启动器");
+  for (const name of ["src/guest-stdio.js", "src/local-catalog-web.js"]) auditRuntime(name);
   const files = [...contents].sort(([a], [b]) => a.localeCompare(b, "en")).map(([name, { bytes }]) => ({
     path: name, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
   }));

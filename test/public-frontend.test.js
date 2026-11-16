@@ -33,7 +33,7 @@ class Element {
 
 function makeDocument() {
   const elements = new Map();
-  for (const selector of ["main", "#plan-message", ".eyebrow", "#ratios .source-rule", "#download-json", "#results"]) elements.set(selector, new Element());
+  for (const selector of ["main", "#plan-message", ".eyebrow", "#ratios .source-rule", "#download-json", "#results", ".tabs", ".hero h1", ".hero .lede"]) elements.set(selector, new Element());
   const tabs = new Map();
   for (const name of ["planner", "ratios", "history", "library"]) {
     const tab = new Element("button"); tab.dataset.tab = name;
@@ -58,22 +58,24 @@ const accountA = { id: "auth0|a", displayName: "A", isAdmin: false, canEditProdu
 const accountB = { id: "auth0|b", displayName: "B", isAdmin: false, canEditProductivity: true, productivityScope: "personal" };
 const payload = { project: { name: "项目", startDate: "2026-10-01", endDate: "2026-11-01" }, workItems: [{ itemId: "w1", quantity: 200, unit: "m" }] };
 
-async function website({ account = accountA, authenticated = true, response, initialStorage = {}, enabled = true, fail = false } = {}) {
+async function website({ account = accountA, authenticated = true, response, initialStorage = {}, enabled = true, fail = false, localEditor = false, hash = "", sessionStorage = new Map(), profile } = {}) {
   const dom = makeDocument(); const calls = []; const writes = []; const assigned = [];
   const values = new Map(Object.entries(initialStorage));
   let currentAccount = account;
   const context = vm.createContext({
-    WORKFORCE_PUBLIC_MODE: enabled, ...dom, document: dom.document,
+    WORKFORCE_PUBLIC_MODE: enabled, WORKFORCE_LOCAL_CATALOG: localEditor, ...dom, document: dom.document,
     localStorage: { getItem: (key) => values.get(key) ?? null, setItem(key, value) { writes.push([key, value]); values.set(key, value); } },
     async fetch(path, options) {
       calls.push([path, options]);
       if (fail) throw new Error("offline");
-      if (path === "/api/session") return { ok: true, json: async () => ({ authenticated, user: currentAccount, csrfToken: "csrf-secret", loginUrl: "/login" }) };
+      if (path === "/api/session") return { ok: true, json: async () => profile ?? ({ authenticated, user: currentAccount, csrfToken: "csrf-secret", loginUrl: "/login" }) };
       const body = response?.(path, options) ?? {};
       return { ok: true, status: 200, json: async () => body };
     },
     crypto: { randomUUID: () => "779cf871-4ee0-411b-b1d6-1fed9f2ac9df" },
-    location: { assign: (path) => assigned.push(path) },
+    location: { assign: (path) => assigned.push(path), hash, pathname: "/", search: "" },
+    history: { replaceState(_data, _title, url) { assigned.push(url); } },
+    sessionStorage: { getItem: (key) => sessionStorage.get(key), setItem: (key, value) => sessionStorage.set(key, value) },
     confirm: () => true, alert: () => {}, addEventListener: () => {}, setTimeout, clearTimeout, console,
   });
   vm.runInContext(publicSource, context);
@@ -360,12 +362,12 @@ test("公开Widget新增及修改工效保留计算mode，私有旧协议仍剔�
   }
 });
 
-function catalogRenderer({ publicMode = true, account = accountA, items = [] } = {}) {
+function catalogRenderer({ publicMode = true, account = accountA, local = false, items = [] } = {}) {
   const elements = new Map();
-  for (const selector of ["#library-division-filter", "#library-subitem-filter", "#library-activity-filter", "#library-search", "#library-count", "#library-rows", "#library-scope-note", "#productivity-scope-note", "#productivity-form-title", "#save-productivity"]) {
+  for (const selector of ["#library-division-filter", "#library-subitem-filter", "#library-activity-filter", "#library-search", "#library-count", "#library-rows", "#library-scope-note", "#productivity-scope-note", "#productivity-form-title", "#save-productivity", "#local-rate-mode", "#local-role-rates", "#crew-output-field"]) {
     elements.set(selector, { value: "", textContent: "", innerHTML: "", hidden: true });
   }
-  const context = vm.createContext({ WORKFORCE_PUBLIC_MODE: publicMode, workforcePublicSession: { account },
+  const context = vm.createContext({ WORKFORCE_PUBLIC_MODE: publicMode, workforcePublicSession: { account, local },
     state: { productivity: items }, qs: (selector) => elements.get(selector), orderedProductivity: () => items,
     formatNumber: (value) => String(value), crewText: () => "—",
     escapeHtml: (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"),
@@ -460,6 +462,98 @@ test("公开表单编辑占位项保留适用范围备注和来源，设备工�
 });
 
 const drain = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+
+test("本机浏览器界面携带启动标识维护条目，可在同标签刷新，只显示本机库", async () => {
+  const sessionStorage = new Map();
+  const profile = { accessMode: "local", account: null, authenticated: false, csrfToken: "editor-launch" };
+  const settings = { localEditor: true, profile, sessionStorage };
+  const f = await website({ ...settings, hash: "#editor-launch" });
+  assert.equal(f.context.workforcePublicSession.local, true);
+  assert.equal(f.context.workforcePublicSession.authenticated, false);
+  assert.deepEqual(f.assigned, ["/"]);
+  await f.context.workforceUI.initialize(makeController());
+  assert.equal(f.document.title, "本机工效库 · 工程劳动力测算");
+  assert.equal(f.tabs.get("library").classList.contains("is-active"), true);
+  assert.equal(f.elements.get(".tabs").hidden, true);
+  for (const [path, method] of [["/api/productivity", "GET"], ["/api/productivity", "POST"], ["/api/productivity/a", "PUT"], ["/api/productivity/a", "DELETE"]]) {
+    await f.context.workforceUI.api(path, { method });
+  }
+  await assert.rejects(f.context.workforceUI.api("/api/workforce-history"), /本机编辑器/);
+  assert.equal(f.calls.length, 5);
+  for (const [, options] of f.calls) {
+    assert.equal(options.credentials, "same-origin");
+    assert.equal(options.headers["X-CSRF-Token"], profile.csrfToken);
+    assert.ok(!Object.hasOwn(options.headers, "X-Workforce-Account"));
+  }
+  assert.deepEqual(f.writes, []);
+  const reload = await website(settings);
+  assert.equal(reload.context.workforcePublicSession.local, true);
+  for (const override of [{ sessionStorage: new Map() }, { profile: { ...profile, csrfToken: "changed" } }, { profile: { ...profile, accessMode: "guest" } }]) {
+    const closed = await website({ ...settings, ...override });
+    assert.equal(closed.context.workforcePublicSession.local, false);
+    const panel = closed.document.body.children[0].children[0];
+    assert.match(panel.children[1].textContent, /重新双击/);
+    assert.equal(panel.children.some((node) => node.tagName === "a"), false);
+  }
+  const cloud = await website({ profile, hash: "#editor-launch" });
+  assert.equal(cloud.context.workforcePublicSession.local, false);
+});
+
+test("本机内嵌页用本机账号范围新增、修改、删除、测算，旧草稿与历史不会复用", async () => {
+  const local = { accessMode: "local", account: null };
+  let changed = 0;
+  const f = await widget({ saved: { workforceAccountId: accountB.id, workforceDraft: { old: true }, workforcePage: "history" },
+    toolResponse(name, args) {
+      if (name === "get_current_profile") return { structuredContent: { ...local, authenticated: false } };
+      if (name === "prepare_project_review") return { structuredContent: { ...local, fingerprint: "fp-" + changed } };
+      if (name === "list_productivity") return { structuredContent: { ...local, items: [] } };
+      if (name === "upsert_productivity" || name === "delete_productivity") {
+        changed++;
+        return { structuredContent: { ...local, saved: args } };
+      }
+      throw new Error("多余的工具调用 " + name);
+    },
+  });
+  let id = 0;
+  f.context.crypto.randomUUID = () => "request-" + ++id;
+  const ui = f.context.workforceUI;
+  assert.equal(f.context.workforcePublicSession.local, true);
+  assert.equal(f.document.body.classList.contains("workforce-readonly"), false);
+  assert.equal(f.controller.restored.length, 0);
+  assert.equal(f.tabs.get("history").hidden, true);
+  await ui.api("/api/productivity");
+  await ui.requestPlan(payload);
+  assert.match(f.messages[0], /这台电脑上的最新工效/);
+  assert.doesNotMatch(f.messages[0], /当前账户 ID|四页/);
+  const entry = { name: "试验段", mode: "crew_day", output: 25 };
+  await ui.api("/api/productivity", { method: "POST", body: JSON.stringify(entry) });
+  await ui.api("/api/productivity/a", { method: "PUT", body: JSON.stringify(entry) });
+  await ui.api("/api/productivity/a", { method: "DELETE" });
+  const changes = f.calls.filter(([name]) => name === "upsert_productivity" || name === "delete_productivity");
+  assert.deepEqual(JSON.parse(JSON.stringify(changes)), [["upsert_productivity", entry], ["upsert_productivity", { ...entry, id: "a", mustExist: true }], ["delete_productivity", { id: "a" }]]);
+  await ui.requestPlan(payload);
+  const plan = { project: payload.project, summary: {}, workItems: [], planOptions: [], requestId: "request-2", workflow: { fingerprint: "fp-3" } };
+  for (const other of [{ accessMode: "guest", account: null }, { account: accountA }, { ...local, requestId: "request-1" }]) f.emit({ ...plan, ...other });
+  assert.equal(f.controller.renders.length, 0);
+  f.emit({ ...plan, ...local });
+  assert.equal(f.controller.renders.length, 1);
+  await assert.rejects(ui.api("/api/workforce-history"), /当前 AI 对话/);
+  assert.equal(f.state().workforceDraft, null);
+  assert.equal(f.calls.some(([name]) => name.includes("history")), false);
+});
+
+test("本机库展示条目来源和实际删除按钮，编辑器显示按工种的数值", () => {
+  const base = { name: "工序", crew: {}, status: "confirmed" };
+  const f = catalogRenderer({ account: null, local: true, items: [
+    { ...base, id: "b", catalogScope: "bundled" }, { ...base, id: "c", catalogScope: "local", hasLocalOverride: true },
+    { ...base, id: "n", catalogScope: "local", mode: "role_productivity", roleProductivity: { 钢筋工: 3.5 } },
+  ] });
+  vm.runInContext("configureProductivityScope()", f.context);
+  const html = f.render();
+  for (const label of ["随附工效", "本机新增", "本机修改", ">删除<", ">修改<", "钢筋工 3.5"]) assert.ok(html.includes(label), label);
+  assert.doesNotMatch(html, /个人|共享默认|仅本人/);
+  assert.equal(f.elements.get("#save-productivity").textContent, "新增本机工效");
+});
 
 test("网页工效成功写入后清理旧请求；相同输入可使用新指纹重prepare，旧结果不回填", async () => {
   for (const [path, method] of [["/api/productivity/p1", "PUT"], ["/api/productivity", "POST"], ["/api/productivity/p1", "DELETE"]]) {

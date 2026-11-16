@@ -37,6 +37,11 @@
 !/src/chatgpt-ui.js
 !/src/cloud-stores.js
 !/src/guest-stdio.js
+!/打开本机工效库.cmd
+!/src/local-catalog-web.js
+!/src/local-productivity-store.js
+!/test/local-catalog-web.test.js
+!/test/local-productivity.test.js
 !/src/mcp.js
 !/src/migrate-public.js
 !/src/planner.js

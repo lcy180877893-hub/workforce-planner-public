@@ -5,7 +5,7 @@ import { renderScheduleVisualizations, normalizeChartView } from "./plan-visuali
 // An unavailable/anonymous public session must never fall back to private mode.
 if (globalThis.WORKFORCE_PUBLIC_MODE === true) {
   await globalThis.workforcePublicSession?.ready;
-  if (!globalThis.workforcePublicSession?.authenticated && !globalThis.workforcePublicSession?.guest) await new Promise(() => {});
+  if (!globalThis.workforcePublicSession?.authenticated && !globalThis.workforcePublicSession?.guest && !globalThis.workforcePublicSession?.local) await new Promise(() => {});
 }
 
 const state = {
@@ -77,15 +77,25 @@ async function confirmAction(message) {
 
 function canMaintainProductivity() {
   return globalThis.WORKFORCE_PUBLIC_MODE !== true
+    || isLocalProductivityMode()
     || (globalThis.workforcePublicSession?.account?.canEditProductivity === true
       && globalThis.workforcePublicSession.account.productivityScope === "personal");
 }
 
 function isPersonalProductivityMode() {
-  return globalThis.WORKFORCE_PUBLIC_MODE === true;
+  return globalThis.WORKFORCE_PUBLIC_MODE === true && !isLocalProductivityMode();
+}
+
+function isLocalProductivityMode() {
+  return globalThis.WORKFORCE_PUBLIC_MODE === true && globalThis.workforcePublicSession?.local === true;
 }
 
 function productivityScopeLabel(item) {
+  if (isLocalProductivityMode()) {
+    const edited = item.catalogScope === "local";
+    const label = item.hasLocalOverride ? "本机修改" : edited ? "本机新增" : "随附工效";
+    return `<small class="catalog-scope${edited ? " is-personal" : ""}">${label}</small>`;
+  }
   if (!isPersonalProductivityMode()) return "";
   const personal = item.hasPersonalOverride === true || item.catalogScope === "personal";
   const label = item.hasPersonalOverride === true ? "个人修改" : personal ? "个人新增" : "共享默认";
@@ -93,6 +103,13 @@ function productivityScopeLabel(item) {
 }
 
 function configureProductivityScope() {
+  if (isLocalProductivityMode()) {
+    qs("#library-scope-note").textContent = "首次使用时可直接选用随附工效。你在这里新增、修改和删除的条目仅用于这台电脑的测算，关闭插件后仍会保留。";
+    qs("#local-rate-mode").hidden = false;
+    qs("#productivity-form-title").textContent = "新增本机工效";
+    qs("#save-productivity").textContent = "新增本机工效";
+    return;
+  }
   if (!isPersonalProductivityMode()) return;
   if (globalThis.workforcePublicSession?.guest) {
     qs("#library-scope-note").textContent = "游客测算使用插件发布时附带的公开工效。仅有已核实工效的工序可参与测算。";
@@ -745,6 +762,7 @@ function renderPlan(plan) {
   qs("#result-content").innerHTML = planMarkup(plan);
   qs("#result-history-note").textContent = plan.history
     ? `本次方案已保存到测算历史，记录时间：${formatDateTime(plan.history.createdAt)}。`
+    : plan.accessMode === "local" ? "本次方案采用本机工效库，可在当前 AI 对话中查看或复制。"
     : plan.accessMode === "guest" ? "游客方案可在当前 AI 对话中查看或复制，插件不保存到个人历史。" : "";
   qs("#results").hidden = false;
   qs("#results").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -899,7 +917,7 @@ function renderLibrary() {
           <td>${escapeHtml(item.name)}${productivityScopeLabel(item)}</td>
           <td><strong>${escapeHtml(item.category)}</strong></td>
           <td>${escapeHtml(item.crewText || crewText(item.crew))}</td>
-          <td class="number-cell">${Number.isFinite(item.output) && item.output > 0 ? formatNumber(item.output) : "待补充"}</td>
+          <td class="number-cell">${isLocalProductivityMode() && item.mode === "role_productivity" && Object.keys(item.roleProductivity ?? {}).length ? escapeHtml(Object.entries(item.roleProductivity).map(([role, value]) => `${role} ${value}`).join("、")) : Number.isFinite(item.output) && item.output > 0 ? formatNumber(item.output) : "待补充"}</td>
           <td>${escapeHtml(item.productivityUnit || "待补充")}</td>
           <td class="work-content">${escapeHtml(item.workContent || (isPersonalProductivityMode() ? "待补充" : "—"))}</td>
           <td><span class="status ${item.status === "confirmed" ? "good" : "warn"}">${item.status === "confirmed" ? "可用" : item.status === "unavailable" ? "不可用" : "待核验"}</span></td>
@@ -991,6 +1009,14 @@ function syncProductivityFormRequirements() {
   const required = form.elements.status.value !== "unavailable";
   for (const name of ["crewText", "output", "productivityUnit"]) form.elements[name].required = required;
   if (isPersonalProductivityMode() && form.dataset.productivityMode === "role_productivity") form.elements.output.required = false;
+  if (isLocalProductivityMode()) {
+    const perRole = form.elements.rateMode.value === "role_productivity";
+    form.elements.crewText.required = required && form.elements.rateMode.value === "crew_day";
+    qs("#local-role-rates").hidden = !perRole;
+    qs("#crew-output-field").hidden = perRole;
+    form.elements.roleRates.required = required && perRole;
+    form.elements.output.required = required && !perRole;
+  }
 }
 
 function resetProductivityForm() {
@@ -1003,8 +1029,9 @@ function resetProductivityForm() {
   form.elements.status.value = "confirmed";
   syncProductivityFormRequirements();
   refreshFormDivisions();
-  qs("#productivity-form-title").textContent = isPersonalProductivityMode() ? "新增个人工效" : "新增工效";
-  qs("#save-productivity").textContent = isPersonalProductivityMode() ? "新增个人工效" : "新增工效";
+  const title = isLocalProductivityMode() ? "新增本机工效" : isPersonalProductivityMode() ? "新增个人工效" : "新增工效";
+  qs("#productivity-form-title").textContent = title;
+  qs("#save-productivity").textContent = title;
   qs("#cancel-edit").hidden = true;
 }
 
@@ -1013,7 +1040,7 @@ function beginEdit(item) {
   form.elements.id.value = item.id;
   // Editing an existing public entry must not silently turn a pump-hour or
   // role-based record into a crew-day record. The private form keeps its old mode.
-  if (isPersonalProductivityMode()) {
+  if (globalThis.WORKFORCE_PUBLIC_MODE === true) {
     form.dataset.productivityMode = item.mode || "crew_day";
     form.dataset.roleProductivity = JSON.stringify(item.roleProductivity ?? {});
     // Preserve editable data that this compact form does not display. Never
@@ -1022,10 +1049,16 @@ function beginEdit(item) {
       notes: item.notes ?? "", equipment: item.equipment ?? [], source: item.source ?? "后续补充",
     });
   }
+  if (isLocalProductivityMode()) {
+    form.elements.rateMode.value = item.mode || "crew_day";
+    form.elements.roleRates.value = Object.entries(item.roleProductivity ?? {}).map(([role, rate]) => `${role}:${rate}`).join(", ");
+  }
   refreshFormDivisions(item.division || "其他工程", item.subitem || "未分类分项");
   form.elements.category.value = item.category;
   form.elements.name.value = item.name;
-  form.elements.crewText.value = item.crewText || crewText(item.crew);
+  form.elements.crewText.value = isLocalProductivityMode()
+    ? Object.entries(item.crew ?? {}).map(([role, count]) => `${role}:${count}`).join(", ")
+    : item.crewText || crewText(item.crew);
   form.elements.output.value = item.output ?? "";
   form.elements.productivityUnit.value = item.productivityUnit ?? "";
   form.elements.workContent.value = item.workContent ?? "";
@@ -1051,17 +1084,26 @@ function productivityFormPayload(form) {
   const crewConfiguration = form.elements.crewText.value.trim()
     ? parseCrewConfiguration(form.elements.crewText.value)
     : { crew: {}, crewText: "" };
-  const preserved = isPersonalProductivityMode() && form.elements.id.value
+  const preserved = globalThis.WORKFORCE_PUBLIC_MODE === true && form.elements.id.value
     ? JSON.parse(form.dataset.productivityPreservedFields || "{}") : {};
+  const mode = isLocalProductivityMode() ? form.elements.rateMode.value
+    : isPersonalProductivityMode() ? form.dataset.productivityMode || "crew_day" : "crew_day";
+  let roleProductivity;
+  if (mode === "role_productivity") {
+    if (isLocalProductivityMode()) {
+      const rates = form.elements.roleRates.value.trim();
+      roleProductivity = rates ? parseCrewConfiguration(rates).crew : {};
+    } else {
+      roleProductivity = JSON.parse(form.dataset.roleProductivity || "{}");
+    }
+  }
   return {
     ...preserved,
     ...formHierarchy(),
     category: form.elements.category.value,
     name: form.elements.name.value,
     unit: productivityUnit.split("/")[0].trim(),
-    mode: isPersonalProductivityMode() ? form.dataset.productivityMode || "crew_day" : "crew_day",
-    ...(isPersonalProductivityMode() && form.dataset.productivityMode === "role_productivity"
-      ? { roleProductivity: JSON.parse(form.dataset.roleProductivity || "{}") } : {}),
+    mode, ...(roleProductivity ? { roleProductivity } : {}),
     crew: crewConfiguration.crew,
     crewText: crewConfiguration.crewText,
     output: form.elements.output.value === "" ? null : Number(form.elements.output.value),
@@ -1250,7 +1292,9 @@ qs("#library-rows").addEventListener("click", async (event) => {
     return;
   }
   if (!button.classList.contains("delete-productivity")) return;
-  const confirmation = isPersonalProductivityMode()
+  const confirmation = isLocalProductivityMode()
+    ? `确定从本机工效库删除“${item.name}”吗？以后在这台电脑上测算时将无法选择此条目。`
+    : isPersonalProductivityMode()
     ? `确定仅对本人隐藏“${item.name}”吗？该工效将不再供你后续测算选择；共享库、其他用户和已保存历史不受影响。`
     : `确定删除“${item.name}”吗？删除后该工效将不再参与劳动力测算。`;
   if (!await confirmAction(confirmation)) return;
@@ -1259,6 +1303,7 @@ qs("#library-rows").addEventListener("click", async (event) => {
     await api(`/api/productivity/${encodeURIComponent(item.id)}`, { method: "DELETE" });
     if (qs("#productivity-form").elements.id.value === item.id) resetProductivityForm();
     await refreshProductivity();
+    if (isLocalProductivityMode()) qs("#save-message").textContent = `已从本机工效库删除“${item.name}”。`;
   } catch (error) {
     if (globalThis.workforceUI) globalThis.workforceUI.notify(error.message);
     else alert(error.message);
@@ -1267,6 +1312,7 @@ qs("#library-rows").addEventListener("click", async (event) => {
 });
 
 qs("#productivity-form").elements.status.addEventListener("change", syncProductivityFormRequirements);
+qs("#productivity-form").elements.rateMode.addEventListener("change", syncProductivityFormRequirements);
 
 qs("#productivity-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1287,7 +1333,9 @@ qs("#productivity-form").addEventListener("submit", async (event) => {
     });
     resetProductivityForm();
     message.className = "hint is-success";
-    message.textContent = isPersonalProductivityMode()
+    message.textContent = isLocalProductivityMode()
+      ? `已保存“${result.saved.name}”。这台电脑上的下次测算将采用新工效。`
+      : isPersonalProductivityMode()
       ? `已保存个人工效：${result.saved.name}。仅本人后续测算采用，不影响共享库、其他用户及已保存历史。`
       : `已保存：${result.saved.name}`;
     await refreshProductivity();
@@ -1303,12 +1351,14 @@ try {
   configureProductivityScope();
   if (!canMaintainProductivity()) qs("#productivity-maintenance").hidden = true;
   await refreshProductivity();
-  addDivision();
-  loadRatioSettings();
-  loadCalendarSettings();
-  const gptStatus = await api("/api/gpt-status");
-  qs("#gpt-status").textContent = gptStatus.message;
-  qs("#gpt-status").className = gptStatus.configured ? "hint is-success" : "hint is-error";
+  if (!globalThis.WORKFORCE_LOCAL_CATALOG || globalThis.workforceHost) {
+    addDivision();
+    loadRatioSettings();
+    loadCalendarSettings();
+    const gptStatus = await api("/api/gpt-status");
+    qs("#gpt-status").textContent = gptStatus.message;
+    qs("#gpt-status").className = gptStatus.configured ? "hint is-success" : "hint is-error";
+  }
   if (globalThis.workforceUI) await globalThis.workforceUI.initialize({
     captureDraft: captureEmbeddedDraft,
     restoreDraft: restoreEmbeddedDraft,
@@ -1319,7 +1369,7 @@ try {
     showHistoryRecord,
   });
 } catch (error) {
-  if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession?.authenticated || globalThis.workforcePublicSession?.guest) {
+  if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession?.authenticated || globalThis.workforcePublicSession?.guest || isLocalProductivityMode()) {
     document.body.innerHTML = `<main><section class="panel"><h1>启动失败</h1><p>${escapeHtml(error.message)}</p></section></main>`;
   }
 }

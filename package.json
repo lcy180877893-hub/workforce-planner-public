@@ -1,6 +1,6 @@
 {
   "name": "workforce-planner-public",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,7 @@
   "scripts": {
     "start": "node src/public-server.js",
     "start:guest": "node src/guest-stdio.js",
+    "catalog:local": "node src/local-catalog-web.js --open",
     "dev": "node --watch src/public-server.js",
     "migrate": "node src/migrate-public.js",
     "preflight": "node scripts/release-preflight.mjs",

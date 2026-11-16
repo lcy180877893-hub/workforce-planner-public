@@ -2,11 +2,13 @@
 
 ## 直接接入自己的 AI
 
-**本机免登录。** 使用 Node.js 24 和锁文件指定的 pnpm，在源码目录执行 `pnpm install --frozen-lockfile --prod --ignore-scripts`。在 AI 的 MCP 设置中选择标准输入输出（stdio），命令填 `node`（或 node 可执行文件的绝对路径），参数填本机 `src/guest-stdio.js` 的绝对路径。由 AI 自动启动插件。此方式无需设置环境变量或开通云服务。
+**Windows 本机包。** 完整解压后双击“打开本机工效库.cmd”，即可在插件界面新增、修改和删除工效。保留打开的命令窗口直至编辑完毕。AI 的 MCP 连接使用“本地命令（stdio）”，命令选安装目录中的 `runtime/node.exe`，参数填同目录下 `src/guest-stdio.js` 的完整路径。已经使用旧版本机连接的用户，退出该连接、将新包解压至原位置、重新启动连接即可。
+
+**从源码运行。** 使用 Node.js 24 和锁文件指定的 pnpm，在源码目录执行 `pnpm install --frozen-lockfile --prod --ignore-scripts`。运行 `pnpm catalog:local` 打开本机工效库，AI 连接命令可填系统的 `node` 和上述入口的完整路径。本机无须注册账号、配置环境变量或开通云服务。Windows 数据默认保存在 `%LOCALAPPDATA%\WorkforcePlanner\productivity.sqlite`。需要隔离测试库时，可在编辑器和 AI 进程中同时设置 `WORKFORCE_LOCAL_DATA_DIR` 为同一独立本机目录。
 
 **团队共用地址。** 维护人升级云端到 0.20.0 后，成员选择 Streamable HTTP，填写团队的 HTTPS 地址（以 `/mcp` 结尾），访客认证方式选“无”。直接在 AI 对话里提交工程量、工期及施工条件即可。如需保存到个人历史或使用个人工效，再启用原有 OAuth 连接。
 
-本机和云端游客均只读发布包中的公开工效，生成的测算不写入服务器个人历史。以下步骤供需要自行托管云端和账号功能的维护人使用。
+首次打开本机版即可使用随包的默认工效。此后的编辑只影响当前电脑和当前系统账户。云端访客读取公开工效。两种免登录模式都把测算结果返回当前会话。以下步骤供需要自行托管云端和账号功能的维护人使用。
 
 ## 1. 先注册账户
 

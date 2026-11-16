@@ -198,7 +198,7 @@ export class PostgresHistoryStore {
   }
 }
 
-function normalizedId(value) {
+export function normalizedId(value) {
   return String(value ?? "").trim().toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -236,7 +236,7 @@ function normalizedPersonalEntry(entry) {
   return normalized;
 }
 
-function preparedEntry(input, existing, { personal = false } = {}) {
+export function preparedEntry(input, existing, { personal = false } = {}) {
   const id = normalizedId(input.id || `${input.division ?? "其他工程"}-${input.subitem ?? "未分类分项"}-${input.name ?? ""}`);
   requiredText(id, "工效编码");
   const mode = ["equipment_hour", "role_productivity"].includes(input.mode) ? input.mode : "crew_day";
@@ -265,7 +265,7 @@ function preparedEntry(input, existing, { personal = false } = {}) {
   return entry;
 }
 
-function filteredEntries(entries, { search = "", status = "" } = {}) {
+export function filteredEntries(entries, { search = "", status = "" } = {}) {
   const needle = String(search).trim().toLowerCase();
   return entries.filter((entry) => !status || entry.status === status)
     .filter((entry) => !needle || [entry.id, entry.name, entry.division, entry.subitem,

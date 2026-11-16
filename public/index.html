@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="沙特工程项目工程量、工期与劳动力方案测算，适用于多种项目类型" />
     <title>沙特项目劳动力测算</title>
-    <link rel="stylesheet" href="/styles.css?v=0.20.0" />
+    <link rel="stylesheet" href="/styles.css?v=0.21.0" />
   </head>
   <body>
     <header class="hero">
@@ -224,13 +224,21 @@
               </div>
               <label>③ 工种 / 工序<input name="name" placeholder="如：钢筋绑扎/安装" required /></label>
               <label>工种类型<input name="category" placeholder="如：钢筋工" required /></label>
+              <label id="local-rate-mode" hidden>工效口径
+                <select name="rateMode">
+                  <option value="crew_day">每班组每班</option>
+                  <option value="equipment_hour">每台设备每小时</option>
+                  <option value="role_productivity">各工种每人每天</option>
+                </select>
+              </label>
               <label>
                 班组配置
                 <input name="crewText" placeholder="中籍1 + 外籍技工4 + 杂工5" required />
                 <small>支持“中籍1 + 外籍技工4 + 杂工5”或“中籍:1, 外籍技工:4, 杂工:5”。</small>
               </label>
               <div class="two-col">
-                <label>推荐工效<input name="output" type="number" min="0.001" step="any" required /></label>
+                <label id="crew-output-field">推荐工效<input name="output" type="number" min="0.001" step="any" required /></label>
+                <label id="local-role-rates" hidden>分工种工效<input name="roleRates" placeholder="如：钢筋工:3.5, 杂工:2" /><small>填写各工种每人每天的产量，用逗号分隔。</small></label>
                 <label>单位<input name="productivityUnit" placeholder="如：t/班组·8h" required /></label>
               </div>
               <label>工作内容<textarea name="workContent" rows="4" placeholder="填写本工效包含的主要工作"></textarea></label>
@@ -303,7 +311,7 @@
       </div>
     </template>
 
-    <script src="/public-mode.js?v=0.20.0"></script>
-    <script type="module" src="/app.js?v=0.20.0"></script>
+    <script src="/public-mode.js?v=0.21.0"></script>
+    <script type="module" src="/app.js?v=0.21.0"></script>
   </body>
 </html>

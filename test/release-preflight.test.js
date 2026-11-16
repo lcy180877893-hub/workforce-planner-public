@@ -30,7 +30,7 @@ test("current manifest hashes reviewed files without trusting the stale export b
   assert.equal(first.schemaVersion, 2);
   assert.equal(first.files.length, RELEASE_FILES.length);
   assert.ok(first.files.every((file) => /^[a-f0-9]{64}$/u.test(file.sha256)));
-  assert.deepEqual(first.runtimeFiles, ["public/app.js", "public/chatgpt-bridge.js", "public/chatgpt-ui.js", "public/public-mode.js", "src/guest-stdio.js", "src/migrate-public.js", "src/public-server.js"]);
+  assert.deepEqual(first.runtimeFiles, ["public/app.js", "public/chatgpt-bridge.js", "public/chatgpt-ui.js", "public/public-mode.js", "src/guest-stdio.js", "src/local-catalog-web.js", "src/migrate-public.js", "src/public-server.js"]);
   await f.put("README.md", "Updated synthetic release documentation.\n");
   const next = await inspectRelease(f.root);
   assert.notEqual(first.sourceDigest, next.sourceDigest);
@@ -90,6 +90,7 @@ test("public start is fixed and neither script nor runtime can activate legacy o
   const cases = [
     ["package.json", JSON.stringify({ license: "MIT", scripts: { start: "node src/server.js", migrate: "node src/migrate-public.js" } }), /start 必须固定/u],
     ["src/public-server.js", "import './plan-history-store.js';\n", /导入越界或未审核/u],
+    ["src/public-server.js", "import './local-productivity-store.js';\n", /不能导入本机/u],
     ["src/public-server.js", "import '../unreviewed.js';\n", /导入越界或未审核/u],
     ["src/public-server.js", "const key = process.env['OPENAI_' + 'API_KEY']; import('arbitrary-package');\n", /动态导入/u],
     ["src/public-server.js", "const store = new ProductivityStore();\n", /私有文件存储回退/u],

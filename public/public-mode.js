@@ -4,7 +4,8 @@
   if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession) return;
   const host = globalThis.workforceHost;
   const $ = (selector) => document.querySelector(selector);
-  const session = globalThis.workforcePublicSession = { authenticated: false, guest: false, account: null };
+  const desktopEditor = !host && globalThis.WORKFORCE_LOCAL_CATALOG === true;
+  const session = globalThis.workforcePublicSession = { authenticated: false, guest: false, local: false, account: null };
   const memory = new Map();
   let csrfToken;
   let locked = false;
@@ -21,6 +22,7 @@
     locked = true;
     session.authenticated = false;
     session.guest = false;
+    session.local = false;
     session.account = null;
     csrfToken = undefined;
     controller = null;
@@ -31,14 +33,15 @@
     const panel = document.createElement("section");
     panel.className = "panel public-login-panel";
     const title = document.createElement("h1");
-    title.textContent = "工程劳动力测算 · 公开版";
+    title.textContent = desktopEditor ? "本机工效库" : "工程劳动力测算 · 公开版";
     const message = document.createElement("p");
     message.textContent = text;
     const link = document.createElement("a");
     link.className = "button primary";
     link.textContent = host ? "重新打开已连接插件的界面" : "登录 / 注册";
     if (!host) link.href = loginUrl === "/login" ? loginUrl : "/login";
-    panel.append(title, message, link);
+    panel.append(title, message);
+    if (!desktopEditor) panel.append(link);
     main.append(panel);
     document.body.replaceChildren(main);
     document.body.classList.remove("public-auth-loading");
@@ -66,12 +69,36 @@
 
   function syncProductivityPermission() {
     // Administrator identity never turns this UI into a shared-catalog editor.
-    document.body.classList.toggle("workforce-readonly", !(session.account?.canEditProductivity && session.account.productivityScope === "personal"));
+    document.body.classList.toggle("workforce-readonly", !session.local && !(session.account?.canEditProductivity && session.account.productivityScope === "personal"));
+  }
+
+  function setAccountFreeMode(profile) {
+    if (profile?.authenticated !== false || profile.account !== null || !["guest", "local"].includes(profile.accessMode)) return false;
+    session.guest = profile.accessMode === "guest";
+    session.local = profile.accessMode === "local";
+    document.body.classList.remove("public-auth-loading");
+    syncProductivityPermission();
+    return true;
+  }
+
+  const reopenEditor = "本机工效库连接已失效，请重新双击打开本机工效库。";
+  function readLaunchToken() {
+    const key = "workforce-local-editor-launch";
+    const token = globalThis.location.hash.slice(1);
+    if (token) {
+      // Keep the capability in this tab only, including on reload.
+      try { globalThis.sessionStorage.setItem(key, token); } catch { /* This launch can still proceed. */ }
+      globalThis.history.replaceState(null, "", globalThis.location.pathname + globalThis.location.search);
+      return token;
+    }
+    try { return globalThis.sessionStorage.getItem(key); } catch { return null; }
   }
 
   async function readSession() {
-    const response = await fetch("/api/session", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error("暂时无法确认登录状态，请刷新后重试。");
+    const headers = { Accept: "application/json" };
+    if (desktopEditor) headers["X-CSRF-Token"] = csrfToken;
+    const response = await fetch("/api/session", { credentials: "same-origin", cache: "no-store", headers });
+    if (!response.ok) throw new Error(desktopEditor ? reopenEditor : "暂时无法确认登录状态，请刷新后重试。");
     return response.json();
   }
 
@@ -180,8 +207,25 @@
   session.api = async (path, options = {}) => {
     await session.ready;
     if (!/^\/api\//.test(path) && path !== "/auth/logout") throw new Error("不支持的公开版接口。");
-    await assertWebsiteAccount();
     const method = (options.method || "GET").toUpperCase();
+    if (desktopEditor) {
+      if (!session.local || locked) throw new Error(reopenEditor);
+      const allowed = path === "/api/productivity" ? ["GET", "POST"] : /^\/api\/productivity\/[^/]+$/.test(path) ? ["PUT", "DELETE"] : [];
+      if (!allowed.includes(method)) throw new Error("本机编辑器仅支持维护本机工效库。");
+      const response = await fetch(path, {
+        method, body: options.body, credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+      });
+      if (response.status === 401 || response.status === 403) {
+        showGate(reopenEditor);
+        throw new Error(reopenEditor);
+      }
+      if (response.ok && response.status === 204) return {};
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "本机工效库操作失败。");
+      return body;
+    }
+    await assertWebsiteAccount();
     const productivityMutation = /^\/api\/productivity(?:\/|$)/.test(path) && ["POST", "PUT", "DELETE"].includes(method);
     if (/^\/api\/productivity(?:\/|$)/.test(path) && !["GET", "HEAD"].includes(method)
       && !(session.account.canEditProductivity && session.account.productivityScope === "personal")) {
@@ -211,16 +255,17 @@
         if (connection?.connected === false) throw new Error("请从已连接的公开插件重新打开界面。");
         const profile = valueOf(await host.callTool("get_current_profile", {}));
         const saved = host.getState() ?? {};
-        if (profile?.accessMode === "guest" && profile.authenticated === false && profile.account === null) {
-          session.guest = true;
-          document.body.classList.remove("public-auth-loading");
-          syncProductivityPermission();
-        } else {
-          setAccount(profile?.account);
-        }
-        if (session.guest || saved.workforceAccountId !== session.account?.id) {
+        if (!setAccountFreeMode(profile)) setAccount(profile?.account);
+        if (session.guest || session.local || saved.workforceAccountId !== session.account?.id) {
           host.setState({ workforceAccountId: session.account?.id ?? null, workforceDraft: null, workforceSettings: {}, workforcePending: null, workforcePage: "planner", workforceLastRequestId: null });
         }
+        return true;
+      }
+      if (desktopEditor) {
+        csrfToken = readLaunchToken();
+        if (!csrfToken) throw new Error(reopenEditor);
+        const profile = await readSession();
+        if (profile.csrfToken !== csrfToken || profile.accessMode !== "local" || !setAccountFreeMode(profile)) throw new Error(reopenEditor);
         return true;
       }
       const current = await readSession();
@@ -229,7 +274,7 @@
       csrfToken = current.csrfToken;
       if (typeof csrfToken !== "string" || !csrfToken) throw new Error("登录校验信息不完整，请重新登录。");
       return true;
-    } catch (error) { showGate(error.message); return false; }
+    } catch (error) { showGate(desktopEditor ? reopenEditor : error.message); return false; }
   })();
 
   if (host) return; // The MCP adapter alone owns all embedded tool operations.
@@ -267,6 +312,15 @@
     },
     async initialize(apiController) {
       await session.ready;
+      if (desktopEditor && session.local && !locked) {
+        document.title = "本机工效库 · 工程劳动力测算";
+        $(".eyebrow").textContent = "工程劳动力测算 · 本机版";
+        $(".hero h1").textContent = "本机工效库";
+        $(".hero .lede").textContent = "按分部、分项查找工效，或录入项目实测值。保存后，连接这台电脑上插件的 AI 即可按新工效测算。";
+        $('.tab[data-tab="library"]').click();
+        $(".tabs").hidden = true;
+        return;
+      }
       if (!session.authenticated || locked) return;
       controller = apiController;
       try { const draft = JSON.parse(storage.getItem("draft") || "null"); if (draft) controller.restoreDraft(draft); } catch { /* Ignore invalid drafts. */ }
