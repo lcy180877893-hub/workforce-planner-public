@@ -8,10 +8,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createMcpServer, cloudReviewInputSchema, cloudPlanInputSchema, requestHash, validatePublicInput } from "./mcp.js";
 import { buildProjectReviewContext } from "./project-review.js";
 import { generateWorkforcePlan } from "./planner.js";
-import { PostgresHistoryStore, PostgresProductivityStore, PostgresPersonalProductivityStore } from "./cloud-stores.js";
+import { bundledProductivityStore, PostgresHistoryStore, PostgresPersonalProductivityStore } from "./cloud-stores.js";
 import { createPublicAuth, loadPublicConfig, requirePrincipal, protectedResourceMetadata, oauthChallenge } from "./public-auth.js";
+import { PUBLIC_VERSION } from "./chatgpt-ui.js";
 
-export const PUBLIC_VERSION = "0.19.1-rc.1";
+export { PUBLIC_VERSION };
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const account = (principal) => ({ id: principal.id, displayName: principal.displayName, isAdmin: principal.isAdmin,
   canEditProductivity: true, productivityScope: "personal" });
@@ -62,7 +63,7 @@ export function createPublicApp({ config, pool, auth = createPublicAuth(config) 
   app.use(express.json({ limit: "768kb" }));
 
   // Bearer-only MCP: website cookies, user-id headers and project fields cannot
-  // select the principal. Anonymous discovery is safe; tools enforce OAuth below.
+  // select the principal. Guests use the bundled catalog and have no history store.
   const mcpLimit = createLimiter({ maximum: 90 });
   app.post("/mcp", async (req, res, next) => {
     try {
@@ -72,7 +73,7 @@ export function createPublicApp({ config, pool, auth = createPublicAuth(config) 
       const principal = await auth.resolvePrincipal(req, { allowSession: false });
       mcpLimit(principal?.id || `anonymous:${req.ip}`);
       const catalog = principal ? new PostgresPersonalProductivityStore(pool, principal.id)
-        : new PostgresProductivityStore(pool);
+        : bundledProductivityStore;
       const history = principal ? new PostgresHistoryStore(pool, principal.id) : null;
       const server = createMcpServer(catalog, history, { cloudMode: true, principal, authConfig: config });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

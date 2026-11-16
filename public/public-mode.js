@@ -4,7 +4,7 @@
   if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession) return;
   const host = globalThis.workforceHost;
   const $ = (selector) => document.querySelector(selector);
-  const session = globalThis.workforcePublicSession = { authenticated: false, account: null };
+  const session = globalThis.workforcePublicSession = { authenticated: false, guest: false, account: null };
   const memory = new Map();
   let csrfToken;
   let locked = false;
@@ -20,6 +20,7 @@
   function showGate(text, loginUrl = "/login") {
     locked = true;
     session.authenticated = false;
+    session.guest = false;
     session.account = null;
     csrfToken = undefined;
     controller = null;
@@ -208,10 +209,17 @@
       if (host) {
         const connection = await host.ready;
         if (connection?.connected === false) throw new Error("请从已连接的公开插件重新打开界面。");
-        setAccount(valueOf(await host.callTool("get_current_profile", {}))?.account);
+        const profile = valueOf(await host.callTool("get_current_profile", {}));
         const saved = host.getState() ?? {};
-        if (saved.workforceAccountId !== session.account.id) {
-          host.setState({ workforceAccountId: session.account.id, workforceDraft: null, workforceSettings: {}, workforcePending: null, workforcePage: "planner", workforceLastRequestId: null });
+        if (profile?.accessMode === "guest" && profile.authenticated === false && profile.account === null) {
+          session.guest = true;
+          document.body.classList.remove("public-auth-loading");
+          syncProductivityPermission();
+        } else {
+          setAccount(profile?.account);
+        }
+        if (session.guest || saved.workforceAccountId !== session.account?.id) {
+          host.setState({ workforceAccountId: session.account?.id ?? null, workforceDraft: null, workforceSettings: {}, workforcePending: null, workforcePage: "planner", workforceLastRequestId: null });
         }
         return true;
       }

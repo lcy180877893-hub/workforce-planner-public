@@ -30,7 +30,7 @@ test("current manifest hashes reviewed files without trusting the stale export b
   assert.equal(first.schemaVersion, 2);
   assert.equal(first.files.length, RELEASE_FILES.length);
   assert.ok(first.files.every((file) => /^[a-f0-9]{64}$/u.test(file.sha256)));
-  assert.deepEqual(first.runtimeFiles, ["public/app.js", "public/chatgpt-bridge.js", "public/chatgpt-ui.js", "public/public-mode.js", "src/migrate-public.js", "src/public-server.js"]);
+  assert.deepEqual(first.runtimeFiles, ["public/app.js", "public/chatgpt-bridge.js", "public/chatgpt-ui.js", "public/public-mode.js", "src/guest-stdio.js", "src/migrate-public.js", "src/public-server.js"]);
   await f.put("README.md", "Updated synthetic release documentation.\n");
   const next = await inspectRelease(f.root);
   assert.notEqual(first.sourceDigest, next.sourceDigest);

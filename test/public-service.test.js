@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from "jose";
+import release from "../package.json" with { type: "json" };
 import { createPublicApp, createPublicPool } from "../src/public-server.js";
 import { createPublicAuth, loadPublicConfig, principalFromClaims } from "../src/public-auth.js";
-import { migrateDatabase, PostgresProductivityStore, PostgresPersonalProductivityStore } from "../src/cloud-stores.js";
+import { migrateDatabase, PostgresProductivityStore, PostgresPersonalProductivityStore, seedPublicProductivity } from "../src/cloud-stores.js";
 
 const config = loadPublicConfig({
   PUBLIC_ORIGIN: "https://workforce.example", AUTH0_ISSUER_BASE_URL: "https://synthetic.auth0.com",
@@ -69,7 +72,7 @@ async function fixture(t, { sessionSubject = null } = {}) {
     return { status: response.status, headers: response.headers, raw,
       body: response.headers.get("content-type")?.includes("application/json") ? JSON.parse(raw) : raw };
   }
-  return { call, pool };
+  return { call, pool, origin };
 }
 
 function projectInput() {
@@ -100,7 +103,7 @@ test("website serves public mode at every HTML entry; no private files or cache"
   }
   for (const path of ["/.env", "/data/plan-history.json", "/src/cloud-stores.js", "/release-manifest.json"]) assert.equal((await call(path)).status, 404);
   assert.match((await call("/public-release.js")).raw, /WORKFORCE_PUBLIC_MODE = true/);
-  assert.equal((await call("/health")).body.version, "0.19.1-rc.1");
+  assert.equal((await call("/health")).body.version, release.version);
   assert.equal((await call("/ready")).status, 200);
   assert.equal((await call("/api/session")).body.authenticated, false);
 });
@@ -200,6 +203,61 @@ test("authenticated MCP requests are wired to the same personal store as the web
   assert.equal((await pool.query("SELECT entry FROM public_productivity WHERE id=$1", [definitions[0].id])).rows[0].entry.output, 10);
 });
 
+test("remote MCP guest calculates a 200 m trench from shared rates without storing a plan", async (t) => {
+  const { call, pool, origin } = await fixture(t);
+  await seedPublicProductivity(pool);
+  const alice = await token();
+  const activityId = "cross-project-41";
+  const personalEdit = await call(`/api/productivity/${activityId}`, { method: "PUT", bearer: alice, body: { output: 25 } });
+  assert.equal(personalEdit.status, 200, personalEdit.raw);
+  const privateEntry = await call("/api/productivity", { method: "POST", bearer: alice,
+    body: { ...definitions[0], id: "alice-only", name: "甲的个人工序" } });
+  assert.equal(privateEntry.status, 200, privateEntry.raw);
+
+  const client = new Client({ name: "guest-integration-test", version: "1.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", origin)));
+  t.after(() => client.close());
+  async function guestTool(name, args) {
+    const result = await client.callTool({ name, arguments: args });
+    assert.ok(!result.isError, JSON.stringify(result.content));
+    assert.equal(result.structuredContent.accessMode, "guest");
+    assert.equal(result.structuredContent.account, null);
+    return result.structuredContent;
+  }
+  const catalog = await guestTool("list_productivity", {});
+  assert.ok(!catalog.items.some((entry) => entry.id === "alice-only"));
+  assert.ok(!catalog.items.some((entry) => entry.id === "synthetic-steel"), "runtime imports are outside the released guest catalog");
+  assert.equal(catalog.items.find((entry) => entry.id === activityId).output, 100);
+  const input = {
+    project: { name: "游客沟槽测算", startDate: "2026-11-17", endDate: "2026-11-21", context: "单一工作面，开挖前置条件均已满足。" },
+    workItems: [{ itemId: "trench", activityId, quantity: 200, unit: "m" }],
+  };
+  const prepared = await guestTool("prepare_project_review", input);
+  assert.equal(prepared.workItems[0].productivity.output, 100);
+  const constructionReview = {
+    fingerprint: prepared.fingerprint, summary: "单项沟槽开挖采用白班顺序施工。",
+    reviewedItemIds: ["trench"], itemDecisions: [{ itemId: "trench", sequenceStatus: "determined", reason: "已满足开工条件。" }],
+    dependencies: [], parallelGroups: [], assumptions: [], questions: [],
+  };
+  const plan = await guestTool("generate_workforce_plan", { ...input, constructionReview });
+  assert.equal(plan.saved, false);
+  assert.equal(plan.history, undefined);
+  assert.equal(plan.planOptions[0].finishDate, "2026-11-18");
+  assert.equal(plan.planOptions[0].summary.conservativePeakHeadcount, 4);
+  assert.equal(plan.planOptions[0].summary.totalPersonDays, 8);
+  const retry = await guestTool("generate_workforce_plan", { ...input, constructionReview, requestId: "guest-trench" });
+  assert.equal(retry.requestId, "guest-trench");
+  assert.equal(retry.saved, false);
+  assert.equal((await pool.query("SELECT COUNT(*)::integer AS count FROM public_plan_history")).rows[0].count, 0);
+  assert.equal((await pool.query("SELECT COUNT(*)::integer AS count FROM public_plan_usage")).rows[0].count, 0);
+
+  const invalidToken = await call("/mcp", { method: "POST", bearer: "expired-or-invalid",
+    headers: { Accept: "application/json, text/event-stream" },
+    body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_productivity", arguments: {} } } });
+  assert.equal(invalidToken.status, 401);
+  assert.match(invalidToken.headers.get("www-authenticate"), /invalid_token/u);
+});
+
 test("complete reviewed workflow saves once, preserves construction order and isolates two users", async (t) => {
   const { call } = await fixture(t);
   const alice = await token(); const bob = await token("auth0|bob");
@@ -246,7 +304,7 @@ test("cookie writes need Origin plus CSRF; website cookies never authenticate MC
   assert.equal((await call("/api/project-review", { method: "POST", body: input, headers: { Origin: config.origin, "X-CSRF-Token": csrf } })).status, 200);
   assert.equal((await call("/api/project-review", { method: "POST", bearer: "invalid", body: input, headers: { Origin: config.origin, "X-CSRF-Token": csrf } })).status, 401);
   const mcp = await call("/mcp", { method: "POST", headers: { Accept: "application/json, text/event-stream" },
-    body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_current_profile", arguments: {} } } });
+    body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_profile", arguments: {} } } });
   assert.equal(mcp.status, 200, mcp.raw);
   assert.equal(mcp.body.result.isError, true);
   assert.match(mcp.body.result._meta["mcp/www_authenticate"][0], /error_description=/);

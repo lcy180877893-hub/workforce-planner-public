@@ -9,7 +9,7 @@ export const RELEASE_FILES = Object.freeze([
   ".gitignore", ".env.example", "README.md", "LICENSE", "DEPLOYMENT.md", "RELEASE-STATUS.md",
   "package.json", "pnpm-lock.yaml", "render.yaml", "release-manifest.json",
   "scripts/release-preflight.mjs", "sql/001-public.sql",
-  "src/chatgpt-ui.js", "src/cloud-stores.js", "src/mcp.js", "src/migrate-public.js",
+  "src/chatgpt-ui.js", "src/cloud-stores.js", "src/guest-stdio.js", "src/mcp.js", "src/migrate-public.js",
   "src/planner.js", "src/productivity-data.js", "src/productivity-expansion.js",
   "src/productivity-hierarchy.js", "src/productivity-store.js", "src/project-review.js",
   "src/public-auth.js", "src/public-server.js", "src/scheduler.js", "src/workflow.js",
@@ -167,7 +167,7 @@ export async function inspectRelease(directory) {
       }
     }
   }
-  for (const name of ["src/public-server.js", "src/migrate-public.js", "public/app.js", "public/public-mode.js", "public/chatgpt-ui.js", "public/chatgpt-bridge.js"]) auditRuntime(name);
+  for (const name of ["src/public-server.js", "src/guest-stdio.js", "src/migrate-public.js", "public/app.js", "public/public-mode.js", "public/chatgpt-ui.js", "public/chatgpt-bridge.js"]) auditRuntime(name);
   const files = [...contents].sort(([a], [b]) => a.localeCompare(b, "en")).map(([name, { bytes }]) => ({
     path: name, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"),
   }));

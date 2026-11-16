@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
-import { createMcpServer } from "../src/mcp.js";
+import { createGuestMcpServer, createMcpServer } from "../src/mcp.js";
 import { buildWorkforceUI, CLOUD_WORKFORCE_UI_URI, WORKFORCE_UI_URI, WORKFORCE_UI_MIME } from "../src/chatgpt-ui.js";
 import { loadPublicConfig, principalFromClaims, PUBLIC_SCOPES } from "../src/public-auth.js";
 
@@ -104,7 +104,38 @@ async function fixture(t, { principal = principalFor(), extraOptions = {}, store
   return { client, server, principal, calls, records, store };
 }
 
-test("cloud anonymous clients can discover tools/resources but every data tool is gated before store access", async (t) => {
+const guestTools = new Set([
+  "get_current_profile", "open_workforce_planner", "list_productivity", "prepare_project_review", "generate_workforce_plan",
+]);
+
+// Preserve the wire security descriptors, which the SDK's ordinary tool schema strips.
+const wireListSchema = z.looseObject({
+  tools: z.array(z.looseObject({
+    name: z.string(), inputSchema: z.looseObject({ type: z.literal("object") }),
+  })),
+});
+
+test("standalone guest server exposes only the five no-login tools and the bundled catalog", async (t) => {
+  const server = createGuestMcpServer();
+  const client = new Client({ name: "standalone-guest-test", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  t.after(async () => { await client.close(); await server.close(); });
+  const { tools } = await client.request({ method: "tools/list" }, wireListSchema);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), [...guestTools].sort());
+  for (const tool of tools) {
+    assert.deepEqual(tool.securitySchemes, [{ type: "noauth" }]);
+    assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
+    assert.equal(tool.annotations.readOnlyHint, true);
+  }
+  const result = await client.callTool({ name: "list_productivity", arguments: { search: "cross-project-41" } });
+  assert.ok(!result.isError);
+  assert.equal(result.structuredContent.account, null);
+  assert.equal(result.structuredContent.items.find((item) => item.id === "cross-project-41")?.output, 100);
+});
+
+test("guests can check their access mode and open the shared catalog; personal tools remain gated", async (t) => {
   const f = await fixture(t, { principal: null });
   assert.equal(f.client.getServerVersion().name, "workforce-planner-public");
   const tools = (await f.client.listTools()).tools;
@@ -113,15 +144,24 @@ test("cloud anonymous clients can discover tools/resources but every data tool i
   assert.ok(tools.some((tool) => tool.name === "open_workforce_planner"));
   const resources = await f.client.listResources();
   assert.deepEqual(resources.resources.map((resource) => resource.uri), [CLOUD_WORKFORCE_UI_URI]);
+  const profile = await f.client.callTool({ name: "get_current_profile", arguments: {} });
+  assert.equal(profile.structuredContent.authenticated, false);
+  assert.equal(profile.structuredContent.account, null);
+  assert.equal(profile.structuredContent.accessMode, "guest");
+  const opened = await f.client.callTool({ name: "open_workforce_planner", arguments: {} });
+  assert.equal(opened.structuredContent.accessMode, "guest");
+  assert.equal(opened.structuredContent.account, null);
+  assert.deepEqual(opened.structuredContent.bootstrap.productivity, definitions);
+  assert.deepEqual(opened.structuredContent.bootstrap.history, []);
+  assert.deepEqual(f.calls, [["productivity-list"]], "opening the guest UI never reads personal history");
+  f.calls.length = 0;
   const args = {
-    open_workforce_planner: {}, list_productivity: {}, prepare_project_review: projectInput,
-    generate_workforce_plan: reviewedInput("not-a-real-fingerprint"),
     list_workforce_history: {}, get_workforce_history: { id: "other-user-record" },
     delete_workforce_history: { id: "other-user-record" },
     upsert_productivity: { category: "test", name: "should not save" },
-    delete_productivity: { id: "test-rebar" }, get_current_profile: {}, get_profile: {},
+    delete_productivity: { id: "test-rebar" }, get_profile: {},
   };
-  for (const tool of tools) {
+  for (const tool of tools.filter((tool) => !guestTools.has(tool.name))) {
     const result = await f.client.callTool({ name: tool.name, arguments: args[tool.name] });
     assert.equal(result.isError, true, tool.name);
     assert.equal(result.structuredContent, undefined, tool.name);
@@ -131,23 +171,18 @@ test("cloud anonymous clients can discover tools/resources but every data tool i
     assert.match(challenge, /error="invalid_token"/u);
     assert.match(challenge, /error_description="[^"\r\n]+"/u);
   }
-  assert.deepEqual(f.calls, [], "匿名调用不能触及工效或任何账号的历史存储");
+  assert.deepEqual(f.calls, [], "an unauthenticated personal tool never reaches its store");
 });
 
 test("cloud tool discovery advertises OAuth scopes and versioned embedded templates", async (t) => {
   const { client } = await fixture(t);
-  // SDK 1.32.1's built-in ToolSchema strips extension fields. Preserve the actual
-  // wire descriptor here while ordinary discovery tests still exercise listTools().
-  const wireListSchema = z.looseObject({
-    tools: z.array(z.looseObject({
-      name: z.string(), inputSchema: z.looseObject({ type: z.literal("object") }),
-    })),
-  });
   const tools = (await client.request({ method: "tools/list" }, wireListSchema)).tools;
   for (const tool of tools) {
     const scopes = tool.annotations.readOnlyHint === true ? ["workforce:read"] : PUBLIC_SCOPES;
-    assert.deepEqual(tool.securitySchemes, [{ type: "oauth2", scopes }], `${tool.name} top-level schemes`);
-    assert.deepEqual(tool._meta.securitySchemes, [{ type: "oauth2", scopes }], `${tool.name} mirrored schemes`);
+    const schemes = [{ type: "oauth2", scopes }];
+    if (guestTools.has(tool.name)) schemes.unshift({ type: "noauth" });
+    assert.deepEqual(tool.securitySchemes, schemes, `${tool.name} top-level schemes`);
+    assert.deepEqual(tool._meta.securitySchemes, schemes, `${tool.name} mirrored schemes`);
   }
   for (const name of ["open_workforce_planner", "generate_workforce_plan", "get_workforce_history"]) {
     const tool = tools.find((item) => item.name === name);
@@ -195,6 +230,10 @@ test("write scopes are enforced independently of admin and produce a scoped OAut
   assert.match(result._meta["mcp/www_authenticate"][0], /error="insufficient_scope"/u);
   assert.match(result._meta["mcp/www_authenticate"][0], /error_description=/u);
   assert.equal(f.calls.some(([name]) => name === "productivity-upsert"), false);
+  const plan = await f.client.callTool({ name: "generate_workforce_plan", arguments: reviewedInput("ignored") });
+  assert.equal(plan.isError, true);
+  assert.match(plan._meta["mcp/www_authenticate"][0], /error="insufficient_scope"/u);
+  assert.equal(f.records.size, 0, "a signed-in read-only user is never silently treated as a guest");
 });
 
 test("get_profile is strict opaque id/name only, while current profile and open UI return trusted account", async (t) => {

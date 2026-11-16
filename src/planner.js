@@ -1,7 +1,7 @@
 import { calculateCalendar, enumerateCalendarDays } from "../public/calendar.js";
 import { buildScheduleOptions } from "./scheduler.js";
 import { prepareWorkflow } from "./workflow.js";
-import { applyProjectReview, buildProjectReviewContext, snapshotProductivityStore } from "./project-review.js";
+import { applyProjectReview, buildProjectReviewContext, snapshotProductivityStore, workItemGroupIds } from "./project-review.js";
 
 export { calculateCalendar };
 
@@ -138,8 +138,7 @@ export async function generateWorkforcePlan(input, productivityStore) {
       error.statusCode = 400;
       throw error;
     }
-    result.divisionId = String(source.divisionId || `name:${result.division}${result.divisionRemark ? `\u0000${result.divisionRemark}` : ""}`);
-    result.subitemId = String(source.subitemId || `${result.divisionId}\u0000${result.subitem}`);
+    Object.assign(result, workItemGroupIds(source, result));
     if (divisionNames.has(result.divisionId) && divisionNames.get(result.divisionId) !== result.division) {
       const error = new Error(`同一分部序号不能对应不同名称：${result.divisionId}`);
       error.statusCode = 400;

@@ -78,6 +78,39 @@ test("PostgreSQL history strictly isolates user lists, details, request lookup a
   await assert.rejects(alice.delete(saved.record.id), { statusCode: 404 });
 });
 
+test("reviewed plans round-trip through PostgreSQL with generated and explicit group IDs", async (context) => {
+  const pool = await createPool(context);
+  await seedPublicProductivity(pool);
+  const catalog = new PostgresPersonalProductivityStore(pool, "synthetic-planner");
+  const history = new PostgresHistoryStore(pool, "synthetic-planner");
+  const project = { name: "沟槽测试", startDate: "2026-11-17", endDate: "2026-11-21" };
+  const review = {
+    summary: "单一工作面，开挖前置条件已具备。", reviewedItemIds: ["trench"],
+    itemDecisions: [{ itemId: "trench", sequenceStatus: "determined", reason: "本项目只有开挖工序。" }],
+    dependencies: [], parallelGroups: [], assumptions: [], questions: [],
+  };
+  const groups = [{}, { divisionRemark: "A区" }, { divisionId: "area-1", subitemId: "trench-1" }];
+  const divisionIds = new Set();
+  const subitemIds = new Set();
+  for (const group of groups) {
+    const workItems = [{ itemId: "trench", activityId: "cross-project-41", quantity: 200, unit: "m", ...group }];
+    const prepared = await buildProjectReviewContext({ project, workItems }, catalog);
+    const plan = await generateWorkforcePlan({
+      project, workItems, constructionReview: { ...review, fingerprint: prepared.fingerprint },
+    }, catalog);
+    const saved = await history.add(plan);
+    const { plan: restored } = await history.get(saved.id);
+    const [item] = restored.workItems;
+    assert.equal(item.divisionId, group.divisionId ?? prepared.workItems[0].divisionId);
+    assert.equal(item.subitemId, group.subitemId ?? prepared.workItems[0].subitemId);
+    assert.equal(restored.summary.calculatedItems, 1);
+    divisionIds.add(item.divisionId);
+    subitemIds.add(item.subitemId);
+  }
+  assert.equal(divisionIds.size, groups.length);
+  assert.equal(subitemIds.size, groups.length);
+});
+
 test("same request ID is per-user; concurrent same-user replay saves once and conflicts on changed hash", async (context) => {
   const pool = await createPool(context);
   const alice = new PostgresHistoryStore(pool, "synthetic-alice");

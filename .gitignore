@@ -36,6 +36,7 @@
 !/release-manifest.json
 !/src/chatgpt-ui.js
 !/src/cloud-stores.js
+!/src/guest-stdio.js
 !/src/mcp.js
 !/src/migrate-public.js
 !/src/planner.js

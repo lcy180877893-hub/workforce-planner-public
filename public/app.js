@@ -5,7 +5,7 @@ import { renderScheduleVisualizations, normalizeChartView } from "./plan-visuali
 // An unavailable/anonymous public session must never fall back to private mode.
 if (globalThis.WORKFORCE_PUBLIC_MODE === true) {
   await globalThis.workforcePublicSession?.ready;
-  if (!globalThis.workforcePublicSession?.authenticated) await new Promise(() => {});
+  if (!globalThis.workforcePublicSession?.authenticated && !globalThis.workforcePublicSession?.guest) await new Promise(() => {});
 }
 
 const state = {
@@ -94,6 +94,10 @@ function productivityScopeLabel(item) {
 
 function configureProductivityScope() {
   if (!isPersonalProductivityMode()) return;
+  if (globalThis.workforcePublicSession?.guest) {
+    qs("#library-scope-note").textContent = "游客测算使用插件发布时附带的公开工效。仅有已核实工效的工序可参与测算。";
+    return;
+  }
   qs("#library-scope-note").textContent = "所有注册用户均可查看共享默认工效。你新增、修改的工效仅用于本人测算；“仅本人隐藏”不改变共享库、其他用户或已保存历史。缺失工效保持不可用、工作内容待补充，补齐后方可启用。";
   const note = qs("#productivity-scope-note");
   note.hidden = false;
@@ -741,7 +745,7 @@ function renderPlan(plan) {
   qs("#result-content").innerHTML = planMarkup(plan);
   qs("#result-history-note").textContent = plan.history
     ? `本次方案已保存到测算历史，记录时间：${formatDateTime(plan.history.createdAt)}。`
-    : "";
+    : plan.accessMode === "guest" ? "游客方案可在当前 AI 对话中查看或复制，插件不保存到个人历史。" : "";
   qs("#results").hidden = false;
   qs("#results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1315,7 +1319,7 @@ try {
     showHistoryRecord,
   });
 } catch (error) {
-  if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession?.authenticated) {
+  if (globalThis.WORKFORCE_PUBLIC_MODE !== true || globalThis.workforcePublicSession?.authenticated || globalThis.workforcePublicSession?.guest) {
     document.body.innerHTML = `<main><section class="panel"><h1>启动失败</h1><p>${escapeHtml(error.message)}</p></section></main>`;
   }
 }

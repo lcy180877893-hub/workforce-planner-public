@@ -273,6 +273,14 @@ function filteredEntries(entries, { search = "", status = "" } = {}) {
       ...Object.keys(entry.roleProductivity)].join(" ").toLowerCase().includes(needle));
 }
 
+// Guests see exactly the catalog shipped with the public release. Database
+// imports, account overlays and the local file store are separate sources.
+const bundledEntries = productivityData.map(normalizedEntry);
+export const bundledProductivityStore = Object.freeze({
+  list(filters) { return structuredClone(filteredEntries(bundledEntries, filters)); },
+  find(id) { return structuredClone(bundledEntries.find((item) => item.id === id) ?? null); },
+});
+
 export class PostgresProductivityStore {
   #pool;
   #isAdmin;

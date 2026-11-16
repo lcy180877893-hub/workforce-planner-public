@@ -265,6 +265,35 @@ async function widget({ saved = {}, account = accountA, publicMode = true, toolR
   return { ...dom, context, host, calls, messages, controller, state: () => state, emit: (value) => listener({ structuredContent: value }) };
 }
 
+test("游客内嵌页只展示公开工效和当次结果，丢弃旧账号状态且不查询历史", async () => {
+  const guest = { accessMode: "guest", account: null };
+  const f = await widget({
+    saved: { workforceAccountId: accountA.id, workforceDraft: { context: "旧账号" }, workforceSettings: { ratio: "old" }, workforcePage: "history" },
+    toolResponse(name) {
+      if (name === "get_current_profile") return { structuredContent: { ...guest, authenticated: false } };
+      if (name === "prepare_project_review") return { structuredContent: { ...guest, fingerprint: "widget-fp" } };
+      if (name === "list_productivity") return { structuredContent: { ...guest, items: [] } };
+      throw new Error("游客界面调用了无关工具：" + name);
+    },
+  });
+  assert.equal(f.context.workforcePublicSession.guest, true);
+  assert.equal(f.controller.restored.length, 0);
+  assert.equal(f.tabs.get("history").hidden, true);
+  assert.equal(f.context.workforceUI.storage.getItem("ratio"), null);
+  await f.context.workforceUI.api("/api/productivity");
+  await assert.rejects(f.context.workforceUI.api("/api/workforce-history"), /个人历史/);
+  await f.context.workforceUI.requestPlan(payload);
+  assert.match(f.messages[0], /游客模式/);
+  assert.doesNotMatch(f.messages[0], /确认当前账户 ID/);
+  const plan = { project: payload.project, summary: {}, workItems: [], planOptions: [], requestId: "request1", workflow: { fingerprint: "widget-fp" } };
+  f.emit({ ...plan, account: accountA });
+  assert.equal(f.controller.renders.length, 0);
+  f.emit({ ...plan, ...guest, saved: false });
+  assert.equal(f.controller.renders.length, 1);
+  assert.equal(f.state().workforceDraft, null);
+  assert.equal(f.calls.some(([name]) => name.includes("history")), false);
+});
+
 test("Widget仅通过profile工具认证，不读cookie；其他账户或未标记旧缓存全部清空", async () => {
   for (const workforceAccountId of [undefined, accountB.id]) {
     const f = await widget({ saved: { workforceAccountId, workforceDraft: { secret: "old" }, workforceSettings: { ratio: "old" }, workforcePending: { requestId: "old" }, workforceLastRequestId: "old", workforcePage: "history" } });

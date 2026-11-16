@@ -119,6 +119,15 @@ divisionRemark 标识该分部的楼栋、区域或施工对象；remark 标识�
 只返回规定结构的 JSON。fingerprint 原样使用本次上下文指纹；reviewedItemIds 和 itemDecisions 都必须逐一覆盖所有 workItems.itemId，且每项恰好一次，包括不可用项。itemDecisions 每项包含 itemId、sequenceStatus 和该项具体施工顺序判断依据 reason。sequenceStatus 为 determined 表示已有足够信息估算该项施工顺序，不表示工效已确认可用；为 needs_information 表示缺少关键条件，无法合理判断该项先后关系。需要补充哪些施工对象、对应关系、施工方法或工作面条件，必须在 reason 和 questions 中明确说明，不能用笼统假设掩盖关键缺失，也不能默认所有未知工作平行施工。任一项为 needs_information 时程序会暂停测算，待用户补充 project.context 后重新判断。
 dependencies 每条包含 beforeItemId、afterItemId 和具体 reason；禁止引用不存在项、自依赖或循环依赖。parallelGroups 每组至少两项并说明 reason，组内任何两项不能具有直接或间接依赖。summary 总结本次整体施工组织，assumptions 和 questions 必须为字符串数组，无内容时返回空数组。此审查依赖图将直接用于排程，不会再叠加全项目汇总规则。`;
 
+export function workItemGroupIds(item, { division, divisionRemark, subitem }) {
+  // Group IDs are included in the JSONB plan. Encode composite keys without NUL separators.
+  const divisionId = String(item.divisionId || (divisionRemark
+    ? `site:${JSON.stringify([division, divisionRemark])}`
+    : `name:${division}`));
+  const subitemId = String(item.subitemId || `subitem:${JSON.stringify([divisionId, subitem])}`);
+  return { divisionId, subitemId };
+}
+
 export async function buildProjectReviewContext(input, store) {
   const snapshot = snapshotProductivityStore(store);
   const sourceProject = input.project ?? {};
@@ -145,7 +154,6 @@ export async function buildProjectReviewContext(input, store) {
     const division = string(definition?.division || item.division) || "其他工程";
     const divisionRemark = string(item.divisionRemark);
     if (divisionRemark.length > 200) invalid("分部备注最多200字");
-    const divisionId = String(item.divisionId || `name:${division}${divisionRemark ? `\u0000${divisionRemark}` : ""}`);
     const subitem = string(definition?.subitem || item.subitem) || "未分类分项";
     const unit = string(item.unit || definition?.unit);
     let status = "calculated";
@@ -164,9 +172,8 @@ export async function buildProjectReviewContext(input, store) {
       itemId: String(item.itemId || `item-${index + 1}`),
       sequence: index + 1,
       activityId: string(item.activityId) || null,
-      divisionId,
+      ...workItemGroupIds(item, { division, divisionRemark, subitem }),
       division,
-      subitemId: String(item.subitemId || `${divisionId}\u0000${subitem}`),
       subitem,
       divisionRemark,
       remark: string(item.remark),
