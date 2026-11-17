@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
 import { createGuestMcpServer, createMcpServer } from "../src/mcp.js";
-import { buildWorkforceUI, CLOUD_WORKFORCE_UI_URI, WORKFORCE_UI_URI, WORKFORCE_UI_MIME } from "../src/chatgpt-ui.js";
+import { buildWorkforceUI, CLOUD_WORKFORCE_UI_URI, CLOUD_WORKFORCE_UI_LEGACY_URIS, WORKFORCE_UI_URI, WORKFORCE_UI_MIME } from "../src/chatgpt-ui.js";
 import { loadPublicConfig, principalFromClaims, PUBLIC_SCOPES } from "../src/public-auth.js";
 
 const authConfig = loadPublicConfig({
@@ -143,7 +143,7 @@ test("guests can check their access mode and open the shared catalog; personal t
   assert.ok(tools.some((tool) => tool.name === "get_profile"));
   assert.ok(tools.some((tool) => tool.name === "open_workforce_planner"));
   const resources = await f.client.listResources();
-  assert.deepEqual(resources.resources.map((resource) => resource.uri), [CLOUD_WORKFORCE_UI_URI]);
+  assert.deepEqual(resources.resources.map((resource) => resource.uri), [...new Set([CLOUD_WORKFORCE_UI_URI, ...CLOUD_WORKFORCE_UI_LEGACY_URIS])]);
   const profile = await f.client.callTool({ name: "get_current_profile", arguments: {} });
   assert.equal(profile.structuredContent.authenticated, false);
   assert.equal(profile.structuredContent.account, null);

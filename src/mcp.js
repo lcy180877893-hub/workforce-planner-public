@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { generateWorkforcePlan } from "./planner.js";
 import { buildProjectReviewContext } from "./project-review.js";
-import { WORKFORCE_UI_URI, CLOUD_WORKFORCE_UI_URI, LOCAL_WORKFORCE_UI_URI, WORKFORCE_UI_MIME, PUBLIC_VERSION, buildWorkforceUI, uiResourceMetadata } from "./chatgpt-ui.js";
+import { WORKFORCE_UI_URI, CLOUD_WORKFORCE_UI_URI, CLOUD_WORKFORCE_UI_LEGACY_URIS, LOCAL_WORKFORCE_UI_URI, WORKFORCE_UI_MIME, PUBLIC_VERSION, buildWorkforceUI, uiResourceMetadata } from "./chatgpt-ui.js";
 import { requirePrincipal, oauthChallenge } from "./public-auth.js";
 import { bundledProductivityStore } from "./cloud-stores.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -199,15 +199,20 @@ export function createMcpServer(productivityStore, historyStore, {
   }
 
   if (!publicMode) {
-    server.registerResource(
-      "workforce-planner-ui",
-      uiUri,
+    // A connected ChatGPT client can retain the preceding outputTemplate URI.
+    // Register the recent public URIs as read-only aliases so that a server
+    // update never turns a cached tool descriptor into a blank widget.
+    const resourceUris = cloudMode ? [...new Set([uiUri, ...CLOUD_WORKFORCE_UI_LEGACY_URIS])] : [uiUri];
+    const embeddedUi = buildWorkforceUI({ cloudMode });
+    for (const resourceUri of resourceUris) server.registerResource(
+      resourceUri === uiUri ? "workforce-planner-ui" : `workforce-planner-ui-compat-${resourceUri.split("v").at(-1)}`,
+      resourceUri,
       { title: "工程劳动力测算", description: "劳动力测算、比例设置、测算历史与工效库四个页面", mimeType: WORKFORCE_UI_MIME },
       async () => ({
         contents: [{
-          uri: uiUri,
+          uri: resourceUri,
           mimeType: WORKFORCE_UI_MIME,
-          text: await buildWorkforceUI({ cloudMode }),
+          text: await embeddedUi,
           _meta: cloudMode ? { ...uiResourceMetadata,
             "openai/widgetDescription": localMode ? "工程劳动力测算本机版：免登录维护这台电脑的工效库，并用本机工效测算。"
               : "工程劳动力测算公开版：使用共享工效免登录测算，登录后可使用个人工效与历史。历史按账号隔离。施工顺序由当前 AI 会话判断，无额外模型API。" } : uiResourceMetadata,
