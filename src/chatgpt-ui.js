@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import packageInfo from "../package.json" with { type: "json" };
 
-// A versioned URI prevents ChatGPT from retaining an incompatible old bundle.
+// A versioned URI creates a fresh ChatGPT iframe while preserving the same
+// planner interface and behavior from the current build.
 export const WORKFORCE_UI_URI = "ui://workforce/planner-v0.18.0.html";
 export const PUBLIC_VERSION = packageInfo.version;
 export const CLOUD_WORKFORCE_UI_URI = `ui://workforce/public-planner-v${PUBLIC_VERSION}.html`;
