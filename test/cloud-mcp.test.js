@@ -151,9 +151,8 @@ test("guests can check their access mode and open the shared catalog; personal t
   const opened = await f.client.callTool({ name: "open_workforce_planner", arguments: {} });
   assert.equal(opened.structuredContent.accessMode, "guest");
   assert.equal(opened.structuredContent.account, null);
-  assert.deepEqual(opened.structuredContent.bootstrap.productivity, definitions);
-  assert.deepEqual(opened.structuredContent.bootstrap.history, []);
-  assert.deepEqual(f.calls, [["productivity-list"]], "opening the guest UI never reads personal history");
+  assert.deepEqual(opened.structuredContent, { ui: { page: "planner" }, accessMode: "guest", account: null });
+  assert.deepEqual(f.calls, [], "opening the guest UI does not preload catalog or personal history");
   f.calls.length = 0;
   const args = {
     list_workforce_history: {}, get_workforce_history: { id: "other-user-record" },
@@ -251,8 +250,7 @@ test("get_profile is strict opaque id/name only, while current profile and open 
     assert.equal(opened.isError, undefined);
     assert.equal(opened.structuredContent.ui.page, page);
     assert.deepEqual(opened.structuredContent.account, accountFor(f.principal));
-    assert.equal(opened.structuredContent.bootstrap.productivity.length, 2);
-    assert.deepEqual(opened.structuredContent.bootstrap.history, []);
+    assert.deepEqual(opened.structuredContent, { ui: { page }, account: accountFor(f.principal) });
   }
 });
 
@@ -290,7 +288,7 @@ test("prepare → reviewed generation → read-only saved history includes accou
   assert.deepEqual(detail.structuredContent.account, accountFor(f.principal));
   assert.equal(detail.structuredContent.record.id, plan.history.id);
   const opened = await f.client.callTool({ name: "open_workforce_planner", arguments: { page: "history" } });
-  assert.equal(opened.structuredContent.bootstrap.history.length, 1);
+  assert.deepEqual(opened.structuredContent.ui, { page: "history" });
   assert.deepEqual(opened.structuredContent.account, accountFor(f.principal));
   assert.equal(f.calls.filter(([name]) => name === "history-add-request").length, 1);
   assert.equal(globalThis.fetch.mock.calls.length, 0);

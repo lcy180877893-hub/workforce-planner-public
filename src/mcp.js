@@ -227,10 +227,6 @@ export function createMcpServer(productivityStore, historyStore, {
         },
         outputSchema: {
           ui: z.object({ page: z.enum(["planner", "ratios", "history", "library"]) }),
-          bootstrap: z.object({
-            productivity: z.array(z.record(z.string(), z.unknown())),
-            history: z.array(z.record(z.string(), z.unknown())),
-          }),
           ...(cloudMode ? { account: z.object({ id: z.string(), displayName: z.string(), isAdmin: z.boolean(),
             canEditProductivity: z.boolean(), productivityScope: z.literal("personal") }).nullable(),
             accessMode: z.literal(anonymousAccessMode).optional() } : {}),
@@ -239,8 +235,12 @@ export function createMcpServer(productivityStore, historyStore, {
         ...privateUiMetadata(false, { render: true, entrypoints: true }),
       },
       async ({ page = "planner" }) => {
-        const [productivity, history] = await Promise.all([productivityStore.list(), anonymous ? [] : historyStore.list()]);
-        return toolResult({ ui: { page }, bootstrap: { productivity, history } });
+        // The embedded UI obtains its live catalog through list_productivity
+        // after mounting. Returning the full catalog here duplicated it in
+        // both structuredContent and text content (over 200 KB on the public
+        // library), which can prevent a host from mounting the component.
+        // Keep this launch result deliberately small and page-specific.
+        return toolResult({ ui: { page } });
       },
     );
   }
