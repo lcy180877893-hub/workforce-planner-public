@@ -10,10 +10,13 @@ export const CLOUD_WORKFORCE_UI_URI = `ui://workforce/public-planner-v${PUBLIC_V
 // a connected server's prior tool metadata until its connection is refreshed.
 // They intentionally serve the current self-contained interface.
 export const CLOUD_WORKFORCE_UI_LEGACY_URIS = Object.freeze([
+  "ui://workforce/public-planner-v0.19.1-rc.1.html",
   "ui://workforce/public-planner-v0.20.0.html",
   "ui://workforce/public-planner-v0.21.0.html",
   "ui://workforce/public-planner-v0.21.1.html",
   "ui://workforce/public-planner-v0.21.2.html",
+  "ui://workforce/public-planner-v0.21.3.html",
+  "ui://workforce/public-planner-v0.21.4.html",
 ]);
 export const LOCAL_WORKFORCE_UI_URI = `ui://workforce/local-planner-v${PUBLIC_VERSION}.html`;
 export const WORKFORCE_UI_MIME = "text/html;profile=mcp-app";

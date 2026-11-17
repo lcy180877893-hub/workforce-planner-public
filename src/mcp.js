@@ -232,6 +232,7 @@ export function createMcpServer(productivityStore, historyStore, {
         },
         outputSchema: {
           ui: z.object({ page: z.enum(["planner", "ratios", "history", "library"]) }),
+          bootstrap: z.object({ productivity: z.array(z.record(z.string(), z.unknown())), history: z.array(z.record(z.string(), z.unknown())) }),
           ...(cloudMode ? { account: z.object({ id: z.string(), displayName: z.string(), isAdmin: z.boolean(),
             canEditProductivity: z.boolean(), productivityScope: z.literal("personal") }).nullable(),
             accessMode: z.literal(anonymousAccessMode).optional() } : {}),
@@ -244,8 +245,10 @@ export function createMcpServer(productivityStore, historyStore, {
         // after mounting. Returning the full catalog here duplicated it in
         // both structuredContent and text content (over 200 KB on the public
         // library), which can prevent a host from mounting the component.
-        // Keep this launch result deliberately small and page-specific.
-        return toolResult({ ui: { page } });
+        // Retain the original required bootstrap shape for already-connected
+        // hosts, but leave its arrays empty. The adapter always fetches fresh
+        // data after mounting; no catalog or personal history is preloaded.
+        return toolResult({ ui: { page }, bootstrap: { productivity: [], history: [] } });
       },
     );
   }

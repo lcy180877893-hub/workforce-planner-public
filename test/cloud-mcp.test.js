@@ -151,7 +151,7 @@ test("guests can check their access mode and open the shared catalog; personal t
   const opened = await f.client.callTool({ name: "open_workforce_planner", arguments: {} });
   assert.equal(opened.structuredContent.accessMode, "guest");
   assert.equal(opened.structuredContent.account, null);
-  assert.deepEqual(opened.structuredContent, { ui: { page: "planner" }, accessMode: "guest", account: null });
+  assert.deepEqual(opened.structuredContent, { ui: { page: "planner" }, bootstrap: { productivity: [], history: [] }, accessMode: "guest", account: null });
   assert.deepEqual(f.calls, [], "opening the guest UI does not preload catalog or personal history");
   f.calls.length = 0;
   const args = {
@@ -250,7 +250,7 @@ test("get_profile is strict opaque id/name only, while current profile and open 
     assert.equal(opened.isError, undefined);
     assert.equal(opened.structuredContent.ui.page, page);
     assert.deepEqual(opened.structuredContent.account, accountFor(f.principal));
-    assert.deepEqual(opened.structuredContent, { ui: { page }, account: accountFor(f.principal) });
+    assert.deepEqual(opened.structuredContent, { ui: { page }, bootstrap: { productivity: [], history: [] }, account: accountFor(f.principal) });
   }
 });
 
@@ -345,6 +345,38 @@ test("cloud embedded resource is versioned, self-contained, four-page and public
   const privateHtml = await buildWorkforceUI();
   assert.doesNotMatch(privateHtml, /globalThis.WORKFORCE_PUBLIC_MODE = true;/u);
   assert.doesNotMatch(privateHtml, /const session = globalThis.workforcePublicSession/u);
+});
+
+test("the original connected descriptor still loads its resource and validates launch output", async (t) => {
+  // Regression for the descriptor actually retained by a connected host.
+  // Do not derive this URI/schema from current server exports.
+  const cachedUri = "ui://workforce/public-planner-v0.19.1-rc.1.html";
+  const cachedOutput = z.strictObject({
+    ui: z.strictObject({ page: z.enum(["planner", "ratios", "history", "library"]) }),
+    bootstrap: z.strictObject({
+      productivity: z.array(z.record(z.string(), z.unknown())),
+      history: z.array(z.record(z.string(), z.unknown())),
+    }),
+    account: z.strictObject({ id: z.string(), displayName: z.string(), isAdmin: z.boolean(),
+      canEditProductivity: z.boolean(), productivityScope: z.literal("personal") }),
+  });
+  for (const principal of [principalFor(), null]) {
+    const f = await fixture(t, { principal });
+    const current = await f.client.readResource({ uri: CLOUD_WORKFORCE_UI_URI });
+    for (const uri of [cachedUri, "ui://workforce/public-planner-v0.21.3.html", "ui://workforce/public-planner-v0.21.4.html"]) {
+      const resource = await f.client.readResource({ uri });
+      assert.equal(resource.contents[0].uri, uri);
+      assert.equal(resource.contents[0].mimeType, "text/html;profile=mcp-app");
+      assert.equal(resource.contents[0].text, current.contents[0].text);
+    }
+    const opened = await f.client.callTool({ name: "open_workforce_planner", arguments: {} });
+    if (principal) cachedOutput.parse(opened.structuredContent);
+    else assert.equal(opened.structuredContent.account, null, "never invent a signed-in identity for legacy hosts");
+    assert.deepEqual(opened.structuredContent.bootstrap, { productivity: [], history: [] });
+    assert.ok(JSON.stringify(opened).length < 1500, "legacy compatibility must not restore the large catalog payload");
+    assert.deepEqual(f.calls, [], "resource and launch calls do not read or write user data");
+    await assert.rejects(f.client.readResource({ uri: "ui://workforce/unknown-template.html" }), /not found/);
+  }
 });
 
 test("unexpected storage failures are sanitized and never expose provider/connection secrets", async (t) => {
